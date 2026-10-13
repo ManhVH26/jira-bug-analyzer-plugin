@@ -35,6 +35,16 @@ Ask confirmation first `[OPTIONS]` (`Create PR` / `Skip PR`); **`Skip PR`** → 
 
 ### Resolve-comment template (`[VN]`, evidence EMBEDDED — the comment a reporter/QA actually reads)
 Written for a non-technical reader (`[VN]`: có dấu, no code/stack/paths — those go to the dev in chat). Wiki markup, posted via `[REST]` v2. **The `Ảnh/Video kiểm thử` block is NOT optional whenever `.jira-bug/evidence/<TICKET>/` has files** — it is what proves the fix, and it is exactly the part that has been silently dropped in the past.
+
+> **Skip-mode variant (`[REPRO_ON]=false`, SKILL.md `[REPRO]` + `[EVIDENCE]` exception).** When Phase 3 skipped the on-device repro (no `--repro` flag / NL intent), there is **no `repro-*` "before"** — only `verify-*` (after) may exist from Phase 5. The resolve comment MUST then carry an explicit skip-mode line so the reporter/QA understands why there is no "trước khi sửa" media:
+> ```
+> *Lưu ý:* Lần chạy này chạy ở chế độ mặc định (không yêu cầu tái hiện trên máy ở bước phân tích), nên không có ảnh/video "trước khi sửa". Fix đã được kiểm thử sau khi sửa — bằng chứng ở dưới.
+> ```
+> Place it right above the `*Ảnh/Video kiểm thử:*` block. If **neither** `repro-*` nor `verify-*` exist (default-skip + Phase-5 no-device fallback hit), replace the `*Ảnh/Video kiểm thử:*` block with:
+> ```
+> *Kiểm thử:* Fix chưa được xác minh trên thiết bị (không có máy sẵn sàng ở bước Phase 5). Diff đã được review trên GitHub + build xanh — chi tiết trong PR.
+> ```
+> and label the PR with `not device-verified` (phase5 no-device fallback). The Phase-6 background agent still posts this comment — a resolve with no evidence line + no skip-mode explanation is a BUG (silent "fixed, trust me" is the exact failure this template prevents).
 ```
 🔧 Đã sửa — [TICKET_KEY]
 

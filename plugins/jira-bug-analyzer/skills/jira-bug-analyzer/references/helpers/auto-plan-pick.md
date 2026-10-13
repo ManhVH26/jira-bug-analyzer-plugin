@@ -6,10 +6,12 @@
 > Rubric anh em: `auto-ticket-pick.md` (Phase 1), `auto-run-test.md` (Phase 5).
 
 ## Tiêu chí quyết định
-- **Score `sum ≥ 80`** → auto-approve → fix luôn (Phase 4).
-- **Không reproduce được on-device** (`bug-analysis-rules.md` `[REPRO]` A7a/A10) → **defer** (`unreproducible` hoặc `no-device`); **dưới `--auto` device là BẮT BUỘC, không có static fallback** — không có máy / không lấy được device lock trong thời gian chờ / chạy hết ladder vẫn không repro → defer + report. `--auto` KHÔNG BAO GIỜ auto-fix một bug chưa reproduce được trên máy.
+- **Score `sum ≥ threshold`** → auto-approve → fix luôn (Phase 4). **Threshold tách theo `[REPRO_ON]`:**
+  - `[REPRO_ON]=true` (user opt-in qua `--repro` hoặc NL intent) → **threshold = 80** (quy tắc cũ).
+  - `[REPRO_ON]=false` (mặc định — không có `--repro`) → **threshold = 90**. Lý do: không có điểm `deterministic_repro` (A7c), nâng ngưỡng để bù phần rigor đã mất. In rõ `[REPRO_ON]` + threshold đã chọn vào scorecard khối Fix-6 để dev soi được.
+- **Không reproduce được on-device** — CHỈ áp khi `[REPRO_ON]=true` (`bug-analysis-rules.md` `[REPRO]` A7a/A10) → **defer** (`unreproducible` hoặc `no-device`); **dưới `--auto` + `--repro` device là BẮT BUỘC, không có static fallback** — không có máy / không lấy được device lock trong thời gian chờ / chạy hết ladder vẫn không repro → defer + report. `--auto --repro` KHÔNG BAO GIỜ auto-fix một bug chưa reproduce được trên máy. **`[REPRO_ON]=false`: KHÔNG defer vì không có repro** — mặc định là bỏ qua bước này; chỉ ngưỡng 90 bù lại.
 - **Không phải bug code thật** (config/console · backend · stale build/env/device · works-as-designed · duplicate — A1/A2) → route Fix-9 (non-code comment) / defer; không tự chế fix.
-- **Score `sum < 80`** → **defer + report** (mark `deferred`, không fix), ghi lý do `score <80 (sum=N)`.
+- **Score `sum < threshold`** → **defer + report** (mark `deferred`, không fix), ghi lý do `score <threshold (sum=N, [REPRO_ON]=<true|false>)`.
 - **Còn câu hỏi chưa rõ** (SOT có, nhưng không trả lời được câu hỏi của ticket) → **defer** (`clarify-gap`); auto KHÔNG tự đoán.
 - **KHÔNG có source-of-truth cho cả phase** (ladder §2.0 (`references/helpers/source-of-truth-discovery.md`) trả NONE, hoặc FUZZY không qua ngưỡng auto-adopt) → **defer** (**`no-sot`**) — lý do RIÊNG, đừng gộp vào `clarify-gap`. Khác nhau ở chỗ: `clarify-gap` là *thiếu 1 câu trả lời cho 1 ticket*, `no-sot` là *cả phase không có ground truth* → nó tác động MỌI ticket của phase, và cách gỡ là ở cấp phase chứ không phải cấp ticket. **Report BẮT BUỘC kèm rung trace + cách gỡ:** đã đi qua rung nào, mỗi rung trả gì, rồi nêu đích danh remedy. **Trace PHẢI bao gồm cả 3 rung project-level (L2d sweep toàn project · L2e fixVersion+Epic của phase · L2f project description)** — nếu chưa chạy chúng thì chưa được kết luận `no-sot`. Remedy thường gặp: thêm/sửa `@N` (mở khoá L2e + xếp hạng L2d theo fixVersion), hoặc override bằng `--spec <url> --figma <url>`. **Ghi trống `no-spec` mà không có trace là VI PHẠM** — chính nó làm lỗi này vô hình suốt thời gian qua (xem SKILL.md `[AUTO]`).
 - **Mid-fix phát hiện plan sai** → **defer** (`mid-fix wrong-plan`); không auto re-plan.
@@ -25,4 +27,4 @@ Mỗi khi một ticket bị defer (score <80 / clarify-gap / **no-sot** / mid-fi
 > **Base build hỏng (vd `origin/develop` không compile) KHÔNG phải lý do dừng** — đây là case "try-and-decide" của Golden Rule `[AUTO]`: fold bản unbreak tối thiểu vào nhánh fix hiện tại (hoặc branch các fix kế off nhánh batch đã chứa unbreak), ghi vào report, đi tiếp. Đừng pause loop chờ người.
 
 ## Single mode
-Cùng tiêu chí cho 1 ticket: ≥80 → fix; <80 / clarify-gap → defer + report. Defer cũng PARK sang `To Do` như trên (single thì park xong là kết thúc, không có batch kế).
+Cùng tiêu chí cho 1 ticket: `sum ≥ threshold` → fix; `<threshold` / clarify-gap → defer + report (threshold = 80 nếu `[REPRO_ON]=true`, else 90). Defer cũng PARK sang `To Do` như trên (single thì park xong là kết thúc, không có batch kế).
