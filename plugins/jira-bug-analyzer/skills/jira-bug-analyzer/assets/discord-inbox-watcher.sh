@@ -51,24 +51,35 @@ process_file() {
 
   # Dedup: ticket already being resumed?
   local active="$PROJECT_DIR/.jira-bug/active-resumes.json"
-  if [ -f "$active" ] && python3 -c "
+  if [ -f "$active" ]; then
+    local dedup_result
+    dedup_result=$(python3 - "$active" "$ticket" <<'PY'
 import json, os, sys
+path, ticket = sys.argv[1], sys.argv[2]
 try:
-    d = json.load(open('$active'))
-    if '$ticket' in d:
-        pid = d['$ticket'].get('pid')
-        if pid and os.path.exists(f'/proc/{pid}'):
-            sys.exit(0)
-        try:
-            os.kill(pid, 0)
-            sys.exit(0)
-        except: pass
-except: pass
-sys.exit(1)
-"; then
-    log "skip (dedup, already resuming): $ticket"
-    mv "$f" "$PROCESSED/" 2>/dev/null || true
-    return 0
+    d = json.load(open(path))
+except Exception:
+    print("none")
+    sys.exit()
+if ticket not in d:
+    print("none")
+    sys.exit()
+pid = d[ticket].get("pid")
+if not pid:
+    print("none")
+    sys.exit()
+try:
+    os.kill(int(pid), 0)
+    print("alive")
+except (ProcessLookupError, PermissionError, OSError):
+    print("dead")
+PY
+)
+    if [ "$dedup_result" = "alive" ]; then
+      log "skip (dedup, already resuming): $ticket"
+      mv "$f" "$PROCESSED/" 2>/dev/null || true
+      return 0
+    fi
   fi
 
   # Spawn claude -p session detached
