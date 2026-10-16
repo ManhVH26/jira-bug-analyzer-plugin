@@ -1,86 +1,91 @@
-# Discord resume handler — reply trên Discord để resume ticket defer
+# Discord resume handler — realtime Q&A + commands trong channel
 
-> **Scope:** INBOUND. Khi dev reply trong Discord channel `#jira-bug-analyzer` (via claudecode-discord bot), Claude session trong plugin folder nhận message → detect ticket key → forward thành Jira comment `@claude {text}` → Job E (next tick của `--manager`, hoặc trigger ngay inline) xử lý resume.
+> **Scope:** INBOUND, realtime. Khi dev / PO / QA reply trong Discord channel `#jira-bug-analyzer` (via claudecode-discord bot), Claude session trên máy central nhận message qua Gateway → classify intent → ack + action trong 2-8s. Fix thật vẫn trên máy dev gốc (Jira comment relay + dev's `--manager` tick).
+
+## Vì sao realtime được
+
+- claudecode-discord bot dùng Discord Gateway WebSocket (persistent connection) → `MESSAGE_CREATE` event push <200ms.
+- Bot forward vào Claude session (via `@anthropic-ai/claude-agent-sdk`) → session đọc + reply qua Discord REST POST <5s total.
+- Không polling, không webhook public — Gateway đã sẵn.
 
 ## Prerequisites
 
-- claudecode-discord bot running + channel `#jira-bug-analyzer` đã `/register` map tới folder project có plugin.
-- Khi dev reply trong channel đó, claudecode-discord spawn Claude session trong folder plugin với message làm input.
-- User CLAUDE.md đã có rule "khi gặp ticket key → invoke `/jira-bug-analyzer` skill" (user-scope rule đã có).
+- claudecode-discord bot running trên 1 máy central (admin team), `/register` channel `#jira-bug-analyzer` → folder có plugin.
+- `.env` của claudecode-discord: `ALLOWED_USER_IDS=<team whitelist>` (comma-separated).
+- Máy dev chạy `--manager --auto <PROJECT>` để Job E pick up Jira comments resume.
 
 ## Detect flow
 
-Khi Claude session nhận 1 input có dạng text thường (không phải full `/jira-bug-analyzer ...` invocation), áp regex `[A-Z][A-Z0-9]+-\d+` để extract ticket key (lấy match ĐẦU tiên; nhiều match → warn + lấy đầu).
+Áp regex `[A-Z][A-Z0-9]+-\d+` vào input message. **First match → `TICKET_KEY`**. No match → treat là chat bình thường ngoài scope, skip hoàn toàn (claudecode-discord vẫn forward reply như chat thường — không phải lỗi).
 
-**Không có ticket key** → treat như chat bình thường, không invoke skill. Bot claudecode-discord cứ reply tự nhiên.
+**Có TICKET_KEY** → tiếp tục intent classification.
 
-**Có ticket key** → tiếp tục dưới đây.
+## Intent classification (LLM-driven)
+
+Dựa message body (sau khi strip ticket key) + context từ ledger (fetched BGMEM) + attachment (nếu có), classify thành 1 trong 5:
+
+| Intent | Signal | Action |
+|---|---|---|
+| **ack-only** | "ok", "noted", "hiểu rồi", emoji phản hồi | Ack nhẹ nhàng, không action thêm |
+| **context Q&A** | Câu hỏi: "plan là gì?", "root cause chỗ nào?", "file nào bị ảnh hưởng?", "@claude explain" | Đọc ledger `summary`+`plan`+`files` + fetch Jira ticket + reply inline (<10s) |
+| **resume command** | "chọn phương án B", "fix", "làm đi", "proceed", "@claude fix", "tiến hành" | Post Jira `@claude {body}` qua `[REST]` + ack "forwarded" (v1.8.0 flow) |
+| **review command** | "won't fix", "không fix", "close", "review", "@claude review" | Post Jira `@claude review {body}` + ack "forwarded for review" |
+| **context push** | Có attachment (log file, screenshot) HOẶC paste code/stack trace dài | Save file/text vào `.jira-bug/discord-attachments/<KEY>/<timestamp>-<filename>` (local nếu central = dev; qua BGMEM nếu khác máy) + ack "received, saved for next analysis cycle" |
+
+**Default khi ambiguous:** treat là context Q&A (an toàn — chỉ đọc, không write).
+
+**Rule:** mọi reply của bot BẮT BUỘC nêu rõ *"Hiểu là: {intent}"* ở đầu để dev correct nhanh nếu classify sai. Vd: *"Hiểu là: resume. Đã forward `@claude chọn B` lên Jira..."*.
 
 ## Decision tree
 
-1. **Fetch ticket** qua `mcp__jira__jira_get_issue` để confirm tồn tại + đọc status + labels.
+1. **Fetch ticket** qua `mcp__jira__jira_get_issue`.
+   - 404 → reply Discord *"⚠️ {KEY} không tìm thấy."* + stop.
+2. **Check ledger row** `analyzed-deferred` cho ticket qua shared memory `[BGMEM]`.
+   - **Không có** → reply Discord *"ℹ️ {KEY} không ở trạng thái defer. Nếu muốn fix mới, gọi `/jira-bug-analyzer {KEY}` trực tiếp."* + stop. (Giữ cho ticket không-defer vẫn chat tự nhiên không trigger side-effect.)
+   - **Có** → vào intent classification + action tương ứng.
+3. **Advance** `discord_last_processed_message_id` ledger field = message.id vừa xử lý (cho resolve watcher skip).
 
-2. **Check ledger row** `analyzed-deferred` cho ticket này (local `.jira-bug/<KEY>/` hoặc shared memory `project/<KEY_PREFIX>/<PHASE>/session/record_bug_status.md` qua `[BGMEM]`).
+## Reply format (sticky)
 
-   | Trường hợp | Hành động |
-   |---|---|
-   | Có ledger row `analyzed-deferred` | → **Resume path** (dưới) |
-   | Không có ledger row, nhưng ticket exists | → skip resume. Giả định dev chỉ chat về ticket, KHÔNG trigger resume. Reply Discord: *"ℹ️ {KEY} không ở trạng thái defer, bỏ qua. Nếu muốn fix mới, gọi `/jira-bug-analyzer {KEY}`."* |
-   | Ticket không tồn tại / 404 | → reply Discord: *"⚠️ {KEY} không tìm thấy trên Jira."* + log. |
+```
+Hiểu là: {intent} · {TICKET_KEY}
 
-## Resume path (ticket in `analyzed-deferred`)
+{action summary — 1-2 dòng}
 
-1. **Strip ticket key khỏi message body** → `{reply_body}` (phần còn lại).
-   - Nếu `{reply_body}` rỗng → treat như intent mơ hồ. Post Jira `@claude` comment với body ngắn: *"@claude (reply từ Discord không có nội dung — cần thêm chỉ đạo)"* → chạy Clarify branch. OR skip + reply Discord yêu cầu dev thêm text.
-   - Khuyên: skip + reply Discord *"⚠️ Reply cần có nội dung sau ticket key. Ví dụ: `{KEY} chọn phương án B`."*
+{nếu Q&A: nội dung trả lời}
+{nếu resume/review: Jira link}
+```
 
-2. **Post Jira comment** qua `[REST]` (`jira_add_comment` endpoint — xem `references/helpers/jira-rest-api.md`):
-   - Body: `@claude {reply_body}` *(cần có `@claude` để Job E detect marker — xem `phase-manager-mode.md` Job E "Marker")*
-   - `[VN]`: body đã là tiếng Việt từ dev reply gốc, giữ nguyên.
-   - Verify 201 + readback.
+Vietnamese `[VN]` có dấu. Technical tokens giữ verbatim.
 
-3. **Trigger Job E Resume branch inline** (không chờ `--manager` tick):
-   - Giữ nguyên pattern của `phase-manager-mode.md` Job E Resume branch:
-     a. Xoá ledger row `analyzed-deferred` (`[BGMEM]`)
-     b. Ghi `.jira-bug/clarify-<KEY>.md` với `{reply_body}`
-     c. Dispatch Phase 3 cho ticket đó (background hoặc inline — tùy context session)
-     d. Advance `commentsCursor` = ID comment vừa post ở step 2
-   - **Caveat:** session hiện tại là 1-off từ claudecode-discord forward, không phải trong `--manager /loop`. Hợp lý: chỉ làm **step a + b + d** (bọc Jira comment + xoá ledger + ghi clarify). Phase 3 dispatch để `--manager` tick sau xử lý (hoặc dev tự chạy `/jira-bug-analyzer {KEY}` để fix ngay).
-   - **Alternative:** nếu dev muốn fix NGAY, invoke `/jira-bug-analyzer --manager <PROJECT-KEY>` inline (nặng — spawn full manager loop). Khuyên dev chỉ chạy khi cần urgent.
+## Multi-user whitelist
 
-4. **Reply Discord** confirm (POST vào cùng channel — reuse helper từ `discord-notify-defer.md`):
-   ```
-   ✅ Đã post `@claude {reply_body}` lên Jira {KEY}. Job E (next `--manager` tick) sẽ resume.
-   Jira: {ticket_url}
-   ```
+claudecode-discord `.env`:
+```
+ALLOWED_USER_IDS=885416107601723423,703224453185929327,1198956639571673231,1252444547355775046
+```
 
-## Idempotency
+User ngoài whitelist gõ → claudecode-discord filter trước, không forward vào session. Zero cost.
 
-- Dev reply 2 lần cùng ticket → 2 Jira comments → Job E cứ xử lý comment ID lớn nhất (xem `phase-manager-mode.md` Job E Scope). Chấp nhận.
-- Reply có ticket key nhưng ledger row đã mất (ticket resumed từ trước) → fall qua "Không có ledger row" branch → skip + info reply.
+## Idempotency + loop prevention
 
-## Loop prevention
-
-**Nguy hiểm:** confirm reply của chính handler này chứa `✅ Đã post...` + có thể chứa ticket key → nếu bot nào lại forward lên Claude session → trigger lại.
-
-Mitigation:
-- Confirm message KHÔNG mention ticket key dạng trần trước `**` bold (format trên dùng backtick `{KEY}` → safe, regex `[A-Z][A-Z0-9]+-\d+` không match trong backtick-wrapped nếu detector smart; nhưng regex đơn giản VẪN match. Nên:
-- **Author filter**: handler check `message.author.id` — nếu == bot's own `application_id` (`1553759426547159090` cho `learn-app` bot) → skip hoàn toàn. claudecode-discord đã filter message của chính nó không spawn session, nên về mặt lý thuyết OK; nhưng khi handler gửi confirm, confirm đó không trigger session mới.
+- Bot's own messages: `message.author.id == bot_application_id` → skip. claudecode-discord đã filter self-messages không spawn session; thêm defensive check trong handler.
+- Dev reply nhiều lần: mỗi message xử lý độc lập; ledger `discord_last_processed_message_id` advance monotonically.
+- Handler crash giữa chừng (sau Jira comment post, trước ack reply) → vô hại. Dev không thấy ack nhưng Job E vẫn pick up Jira comment ở tick kế.
 
 ## Testing
 
-1. Dry: tạo 1 Jira ticket giả, add ledger row `analyzed-deferred` manual.
-2. Trong Discord `#jira-bug-analyzer`, gõ: `AAP729-2 chọn phương án B`.
-3. claudecode-discord forward → Claude session spawn.
-4. Kỳ vọng:
-   - Jira ticket có comment mới `@claude chọn phương án B`
-   - Ledger row `analyzed-deferred` xóa
-   - `.jira-bug/clarify-AAP729-2.md` xuất hiện với body `chọn phương án B`
-   - Discord channel có reply `✅ Đã post ...`
+1. Trigger defer thật (`--auto --discord-defer` với bug confidence thấp) → thấy Discord ping.
+2. **Q&A test**: reply `AAP-123 plan là gì?` → bot reply trong 10s với plan từ ledger. Không trigger resume.
+3. **Resume test**: reply `AAP-123 chọn phương án B` → bot ack + post Jira. Máy dev's --manager tick resume.
+4. **Review test**: reply `AAP-123 không fix, review` → bot ack + post Jira `@claude review`.
+5. **Context push test**: reply `AAP-123 kèm log` + attach file → bot ack + save file. Confirm `.jira-bug/discord-attachments/AAP-123/` có file.
+6. **Negative**: reply `AAP-999` cho ticket không-defer → bot info-reply không side-effect.
 
 ## Related
 
-- `phase-manager-mode.md` Job E — Resume branch mechanics
-- `discord-notify-defer.md` — OUTBOUND counterpart
-- `assets/discord-roles.json` — config (channel ID để reply confirm)
+- `phase-manager-mode.md` → Job E Resume/Review/Clarify (pick up Jira comment)
+- `discord-notify-defer.md` → OUTBOUND pair
+- `discord-resolve-watcher.md` → post ✅ Resolved khi PR open
+- `assets/discord-roles.json` → config
 - SKILL.md Golden Rule `[DISCORD-DEFER]`

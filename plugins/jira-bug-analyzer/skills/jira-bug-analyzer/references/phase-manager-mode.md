@@ -70,6 +70,8 @@ makes KB-backfill reliable independent of watch-file state.
 
 **Then: deferred-ticket comment scan → Job E** — ledger-driven: pull mọi row `analyzed-deferred` (`[BGMEM]`), batch 1 `jira_search` để lọc ticket có `updated > <earliest commentsCursor timestamp>`, rồi fetch comment per ticket. Independent của PR state / Done state.
 
+**Then: Discord resolve scan → Job F** (`[DISCORD-DEFER]`, opt-in) — ledger-driven: pull mọi row có `pr_url` present + `resolve_posted_to_discord != true` + `discord_defer_enabled: true` (`[BGMEM]`); per row POST *"✅ Resolved {KEY}: {PR_URL}"* vào `defer_channel_id` qua Discord REST + set `resolve_posted_to_discord: true` + `resolve_posted_at: <ISO>`. Full spec: `references/helpers/discord-resolve-watcher.md`. Skip toàn bộ nếu env `LEARN_APP_DISCORD_BOT_TOKEN` unset. Non-blocking: fail → log + retry tick kế (flag chưa set).
+
 ## Job A — review-comment handling (interactive; `--auto` auto-applies the clear ones)
 The mechanics live in `references/helpers/pr-merge-watcher.md` ("Review-comment poll" +
 "Address review comments"). Manager mode is the orchestrator that runs them. Per PR, while `OPEN`:
@@ -178,6 +180,16 @@ Resume + Review cùng khớp → ưu tiên **Review** (an toàn hơn, dev vẫn 
 ### `[SHEET]` (google-sheet board)
 Job E **n/a** — sheet không có comment thread per bug. Report `Job E: n/a (google-sheet board)` trong pass summary.
 
+## Job F — Discord resolve post (`[DISCORD-DEFER]`, opt-in, notify-only)
+Chỉ chạy nếu env `LEARN_APP_DISCORD_BOT_TOKEN` set. Spec: `references/helpers/discord-resolve-watcher.md`.
+1. Pull mọi ledger row có `pr_url` present + `resolve_posted_to_discord != true` + `discord_defer_enabled == true` (`[BGMEM]`).
+2. Per row: build message *"✅ Resolved **{TICKET_KEY}**: {PR_URL}\n{summary}\nChangelog: {PR title}"* → POST qua Discord REST vào `defer_channel_id` (từ `assets/discord-roles.json`) → verify 200/201.
+3. Success → set ledger `resolve_posted_to_discord: true` + `resolve_posted_at: <ISO>` atomic (`[BGMEM]`).
+4. Failure → log + skip + retry ở tick kế (flag chưa set — idempotent).
+5. Report một dòng per newly-posted: `discord-resolve: posted <KEY> → <PR link>`.
+
+Race giữa 2 máy cùng chạy `--manager` cho project → cả 2 có thể post. Chấp nhận (Discord noise acceptable); atomic set flag ở BGMEM đảm bảo không post 3+ lần.
+
 ## Honest expectation (state it; don't overpromise)
 The self-armed `/loop` rides on `CronCreate`, which is **not a background daemon** — it fires only
 while a Claude session is open and idle (see `pr-merge-watcher.md` → "How the watcher actually
@@ -194,6 +206,7 @@ Print a concise summary and end the pass (do NOT `CronDelete` the manager loop �
 - 🔎 **Orphan Done tickets** backfilled from the board scan.
 - 📊 **Auto-fix quality (Job D):** `<total auto-fixed> fixed · <reopened> reopened · reopen-rate <pct>%` + any newly-reopened keys.
 - 💬 **Deferred resumed (Job E):** `<K comment xử lý>` — `<X resumed> · <Y review-requested> · <Z clarify-posted>` + per-ticket key.
+- ✅ **Discord resolve posts (Job F, `[DISCORD-DEFER]`):** `<N tickets posted>` + per-ticket key → PR link. Skip nếu env unset.
 - ⚠️ Anything surfaced (un-pushed memory, unreadable PR, arming failure).
 
 Errors → `references/helpers/troubleshooting.md`. Invariants: `[REST]` (Jira reads/replies),
