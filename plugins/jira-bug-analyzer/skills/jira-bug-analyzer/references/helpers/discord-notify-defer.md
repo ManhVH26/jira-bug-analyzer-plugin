@@ -25,19 +25,51 @@ Tra `roles[<picked>]` → `discord_user_id`.
 
 ## Build message
 
-Format cố định (dễ parse ngược bởi resume handler + đồng nhất Discord render):
+**Nguyên tắc đồng nhất:** Discord message **copy nguyên văn body của Jira defer comment vừa post ở step 2.a**, chỉ thêm Discord mention ở đầu + Reply action footer ở cuối. ONE source of truth = Jira comment. Dev/QA/PO đọc Jira hay Discord đều cùng thông tin, không phải maintain 2 nơi.
+
+Format:
 
 ```
 <@{discord_user_id}> **{TICKET_KEY}** cần quyết định — ping **{role}**
-{short summary 1-2 dòng, VN có dấu}
-Reason: {defer_reason — vd `score<80`, `clarify-gap`, `no-sot`}
-Jira: {ticket_url}
 
-Reply thẳng trong channel này với ticket key để resume. Ví dụ:
-`{TICKET_KEY} chọn phương án B` · `{TICKET_KEY} @claude fix` · `{TICKET_KEY} @claude review`
+{COPY NGUYÊN VĂN body của Jira comment vừa post ở auto-plan-pick.md step 2.a — bao gồm reason defer, bug summary, clarify questions nếu có, phương án đề xuất nếu có, link ledger slug. Không re-format, không rút gọn — người đọc Discord phải thấy đúng những gì người đọc Jira thấy.}
+
+📎 **Jira:** {ticket_url}
+
+📝 **Chọn 1 trong các option sau** (dev/QA/PO đều reply được, prefix bằng ticket key):
+
+{IF Jira comment có liệt kê plan A/B/C — render từng option 1 dòng với label}
+- `{TICKET_KEY} A` → **{tên plan A, 1 dòng — vd "Giữ gate 4 TAB_ROUTES, không thay đổi code"}**
+- `{TICKET_KEY} B` → **{tên plan B — vd "Mở scope ra toàn app, bỏ gate 4 TAB_ROUTES"}**
+- `{TICKET_KEY} C` → **{tên plan C — vd "Thêm remote config toggle điều khiển runtime"}**
+
+**🖊️ Custom (nếu không option nào vừa):**
+- `{TICKET_KEY} <tự viết câu trả lời/đề xuất phương án khác/dán link/cung cấp info>` → agent nhận context mới + re-analyze
+
+**⚡ Command đặc biệt:**
+- `{TICKET_KEY} @claude fix` → bắt đầu fix ngay với context hiện có (nếu đã đủ info)
+- `{TICKET_KEY} @claude review` → chỉ review phân tích, không fix
+- `{TICKET_KEY} close <lý do>` → đóng ticket (invalid / won't-fix / duplicate / cannot-reproduce)
+
+_Reply được chuyển về terminal `--manager` đang chạy để resume — không spawn session mới trên Discord, không hiện tool-use._
 ```
 
-`[VN]` áp dụng cho summary + reason prose. Technical tokens (ticket key, reason enum) giữ verbatim.
+**Build steps cụ thể:**
+1. Lấy `jira_comment_body` = chuỗi body đã post lên Jira ở step 2.a (giữ nguyên markdown Jira, Discord render được ADF-style markdown tương tự: `**bold**`, `*italic*`, `` `code` ``, bullet `-`, numbered `1.`). Nếu Jira dùng cú pháp đặc thù (ADF `panel`, `expand`) → convert sang markdown thường trước khi post Discord.
+2. Prepend 1 dòng mention + 1 dòng trống.
+3. Append Jira URL + Reply action footer.
+4. Nếu tổng > 1900 ký tự (Discord limit 2000, chừa 100 cho mention + markdown overhead) → giữ nguyên mention + 400 ký tự đầu Jira body + `… (xem đầy đủ trên Jira)` + Jira link + Reply footer.
+
+**Không tự generate câu hỏi/plan trong message này** — chỉ copy. Nếu Jira comment không có clarify questions / plan options (ví dụ `no-sot` chỉ ghi "thiếu spec") thì Discord cũng không có — không bịa thêm.
+
+**Nguyên tắc build:**
+- `clarify_questions` + `plan_options` lấy **nguyên văn** từ Fix-6 block của ticket (`.jira-bug/project/<KEY>/<TICKET>/analysis.md` section "Câu hỏi cần làm rõ" / "Phương án fix đề xuất"). KHÔNG tự generate — nếu Fix-6 không có → bỏ cả section (ví dụ `no-sot` thuần, không có question để hỏi).
+- `clarify-gap` → **BẮT BUỘC** có section Câu hỏi (reason của defer).
+- `score<threshold` → **BẮT BUỘC** có section Phương án (có plan nhưng score thấp — hỏi PO duyệt).
+- `no-sot` → **BẮT BUỘC** có 1 dòng remedy (ví dụ "Cần spec/figma cho Phase 3 — thêm `@3` khi reply, hoặc dán link `--spec <url>`") THAY cho Phương án.
+- `mid-fix wrong-plan` → **BẮT BUỘC** có 1 dòng mô tả plan sai + câu hỏi hướng đi mới.
+- `[VN]` áp dụng cho prose. Technical tokens (ticket key, reason enum, action verb như `@claude fix`) giữ verbatim.
+- Hạn chế độ dài message ≤ 2000 ký tự (Discord limit). Nếu questions/options dài → tóm tắt + trỏ link Jira.
 
 ## Gọi Discord REST
 

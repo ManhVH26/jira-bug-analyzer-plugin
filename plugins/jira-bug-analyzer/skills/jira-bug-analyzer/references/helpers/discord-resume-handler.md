@@ -1,152 +1,120 @@
-# Discord resume handler — realtime Q&A + commands trong channel
+# Discord resume handler — inbox-write pattern (v1.11+)
 
-> **Scope:** INBOUND, realtime. Khi dev / PO / QA reply trong Discord channel `#jira-bug-analyzer` (via claudecode-discord bot), Claude session trên máy central nhận message qua Gateway → classify intent → ack + action trong 2-8s. Fix thật vẫn trên máy dev gốc (Jira comment relay + dev's `--manager` tick).
+> **Scope:** INBOUND. Khi dev/PO/QA reply trong Discord channel `#jira-bug-analyzer`, claudecode-discord bot KHÔNG spawn Claude session và KHÔNG hiện tool-use trong Discord. Bot chỉ ghi 1 file vào `.jira-bug/discord-inbox/` + ack. Terminal `--manager` đang chạy trên máy dev watch folder đó qua Monitor tool, phát hiện file mới → classify intent → push-mode spawn `nohup claude -p "/jira-bug-analyzer <KEY> --resume-from-defer --auto" &` ngay từ shell của `--manager`. Spawn chạy trong env dev, hoàn toàn vô hình với Discord.
 
-## Vì sao realtime được
-
-- claudecode-discord bot dùng Discord Gateway WebSocket (persistent connection) → `MESSAGE_CREATE` event push <200ms.
-- Bot forward vào Claude session (via `@anthropic-ai/claude-agent-sdk`) → session đọc + reply qua Discord REST POST <5s total.
-- Không polling, không webhook public — Gateway đã sẵn.
+> **Vì sao đổi:** v1.10 cho bot invoke `Skill` tool → mỗi reply = 1 Claude session chạy ngay trong Discord bot, tool-use hiện tràn channel (observed: AAP729-42 reply → bot gọi `jira_get_issue`/`Bash`/`Skill` ngay trên Discord, user không muốn). v1.11 kéo spawn về `--manager` terminal: Discord thuần relay, speed giữ nguyên (<5s file-watch), 1 execution path, không phải approve/reject tool-use trên Discord nữa.
 
 ## Prerequisites
 
-- claudecode-discord bot running trên 1 máy central (admin team), `/register` channel `#jira-bug-analyzer` → folder có plugin.
-- `.env` của claudecode-discord: `ALLOWED_USER_IDS=<team whitelist>` (comma-separated).
-- Máy dev chạy `--manager --auto <PROJECT>` để Job E pick up Jira comments resume.
+- claudecode-discord bot running (bất kỳ máy nào), `/register` channel `#jira-bug-analyzer` → folder có plugin + `.jira-bug/` ghi được. Bot phải mount được folder đó (local path hoặc shared drive / rsync tới máy dev).
+- Terminal dev chạy `--manager --auto <PROJECT>` → Job G (inbox watcher, `phase-manager-mode.md`) tự Monitor `.jira-bug/discord-inbox/` khi manager mode entry.
+- `assets/discord-inbox-write.sh` sẵn trong plugin — bot invoke script này thay cho spawn Claude Skill.
+- `.env` bot: `ALLOWED_USER_IDS=<whitelist>` giữ nguyên.
 
-## Detect flow
-
-Áp regex `[A-Z][A-Z0-9]+-\d+` vào input message. **First match → `TICKET_KEY`**. No match → treat là chat bình thường ngoài scope, skip hoàn toàn (claudecode-discord vẫn forward reply như chat thường — không phải lỗi).
-
-**Có TICKET_KEY** → tiếp tục intent classification.
-
-## Intent classification (LLM-driven)
-
-Dựa message body (sau khi strip ticket key) + context từ ledger (fetched BGMEM) + attachment (nếu có), classify thành 1 trong 5:
-
-| Intent | Signal | Action |
-|---|---|---|
-| **ack-only** | "ok", "noted", "hiểu rồi", emoji phản hồi | Ack nhẹ nhàng, không action thêm |
-| **context Q&A** | Câu hỏi: "plan là gì?", "root cause chỗ nào?", "file nào bị ảnh hưởng?", "@claude explain" | Đọc ledger `summary`+`plan`+`files` + fetch Jira ticket + reply inline (<10s) |
-| **resume command** | "chọn phương án B", "fix", "làm đi", "proceed", "@claude fix", "tiến hành" | **Push mode (v1.10+ default):** write clarify file + post Jira `@claude {body}` + Bash spawn background Claude session `nohup claude -p "/jira-bug-analyzer <KEY> --resume-from-defer --auto" >logs 2>&1 &` + record pid vào `.jira-bug/active-resumes.json` + ack "spawn pid X, ETA 5-30 min". Dedup: cùng KEY đã có pid alive → skip spawn, ack "đã busy". **Legacy mode (set env `JIRA_BUG_DISCORD_PUSH=0`):** chỉ post Jira comment, chờ `--manager` Job E tick (v1.9.0 flow). |
-| **review command** | "won't fix", "không fix", "close", "review", "@claude review" | Post Jira `@claude review {body}` + ack "forwarded for review" |
-| **context push** | Có attachment (log file, screenshot) HOẶC paste code/stack trace dài | Save file/text vào `.jira-bug/discord-attachments/<KEY>/<timestamp>-<filename>` (local nếu central = dev; qua BGMEM nếu khác máy) + ack "received, saved for next analysis cycle" |
-
-**Default khi ambiguous:** treat là context Q&A (an toàn — chỉ đọc, không write).
-
-**Rule:** mọi reply của bot BẮT BUỘC nêu rõ *"Hiểu là: {intent}"* ở đầu để dev correct nhanh nếu classify sai. Vd: *"Hiểu là: resume. Đã forward `@claude chọn B` lên Jira..."*.
-
-## Decision tree
-
-1. **Fetch ticket** qua `mcp__jira__jira_get_issue`.
-   - 404 → reply Discord *"⚠️ {KEY} không tìm thấy."* + stop.
-2. **Check ledger row** `analyzed-deferred` cho ticket qua shared memory `[BGMEM]`.
-   - **Không có** → reply Discord *"ℹ️ {KEY} không ở trạng thái defer. Nếu muốn fix mới, gọi `/jira-bug-analyzer {KEY}` trực tiếp."* + stop. (Giữ cho ticket không-defer vẫn chat tự nhiên không trigger side-effect.)
-   - **Có** → vào intent classification + action tương ứng.
-3. **Advance** `discord_last_processed_message_id` ledger field = message.id vừa xử lý (cho resolve watcher skip).
-
-## Reply format (sticky)
+## Flow
 
 ```
-Hiểu là: {intent} · {TICKET_KEY}
-
-{action summary — 1-2 dòng}
-
-{nếu Q&A: nội dung trả lời}
-{nếu resume/review: Jira link}
+[Discord] User reply: "AAP729-42 B" (hoặc free text, hoặc @claude fix…)
+    │
+[Bot] match /^[A-Z][A-Z0-9]+-\d+\s/ regex
+    │   - match → run assets/discord-inbox-write.sh (xem schema bên dưới)
+    │   - no match → chat thường, bot bỏ qua (giữ compat với chat tự do)
+    │
+[Bot] ack: "✅ Đã nhận {TICKET}. Chuyển về terminal --manager để resume (ETA <10s)."
+    │   (BOT KẾT THÚC. Không spawn, không tool-use, không Skill)
+    │
+[--manager terminal] Monitor .jira-bug/discord-inbox/*.json phát hiện file mới
+    │
+[--manager Job G] đọc file → classify intent → act (push-mode spawn hoặc inline)
+    │   (chi tiết trong phase-manager-mode.md Job G)
 ```
 
-Vietnamese `[VN]` có dấu. Technical tokens giữ verbatim.
+## Inbox file schema
 
-## Multi-user whitelist
+Bot ghi vào `.jira-bug/discord-inbox/<TICKET>-<message_id>.json`:
 
-claudecode-discord `.env`:
+```json
+{
+  "ticket": "AAP729-42",
+  "message_id": "1560650882062753845",
+  "channel_id": "1560595714386567169",
+  "guild_id": "1476773352130740375",
+  "author_id": "703224453185929327",
+  "author_name": "HungND",
+  "content": "AAP729-42 B",
+  "content_stripped": "B",
+  "attachments": [],
+  "received_at": "2026-10-16T20:54:00Z",
+  "status": "pending",
+  "schema_version": "v1.11"
+}
 ```
-ALLOWED_USER_IDS=885416107601723423,703224453185929327,1198956639571673231,1252444547355775046
+
+- `content` = raw message body.
+- `content_stripped` = `content` với ticket key + leading whitespace đã bỏ (giúp Job G parse intent nhanh — `B`, `@claude fix`, `scope = full app`).
+- `attachments` = array of `{filename, url, size}` cho file đính kèm (log, screenshot). Job G download riêng nếu cần.
+- `schema_version` → future-compat.
+
+Sau khi Job G xử lý xong: move file sang `.jira-bug/discord-inbox/processed/<TICKET>-<message_id>.json` + append field `processed_at` + `job_g_outcome` (`spawned` / `inline-resumed` / `skipped-dedup` / `error`).
+
+## Bot-side invocation
+
+Bot (claudecode-discord repo, Node.js) nhận message qua Discord Gateway. Trước khi forward vào Claude SDK session (hành vi mặc định cũ), check hook:
+
+```javascript
+// Pseudo-code trong bot handler
+const TICKET_RE = /^([A-Z][A-Z0-9]+-\d+)\s+(.+)$/s
+const match = message.content.match(TICKET_RE)
+
+if (match) {
+  const [, ticket, rest] = match
+  // Call plugin helper (shells out, không spawn Claude)
+  const result = spawnSync('bash', [
+    path.join(PLUGIN_DIR, 'assets/discord-inbox-write.sh'),
+    '--ticket', ticket,
+    '--message-id', message.id,
+    '--channel-id', message.channelId,
+    '--guild-id', message.guildId,
+    '--author-id', message.author.id,
+    '--author-name', message.author.username,
+    '--content', message.content,
+    '--content-stripped', rest,
+    '--attachments', JSON.stringify(message.attachments.map(a => ({filename: a.name, url: a.url, size: a.size}))),
+    '--inbox-dir', INBOX_DIR  // từ env, mặc định ~/Desktop/src/<project>/.jira-bug/discord-inbox
+  ], {encoding: 'utf-8'})
+
+  if (result.status === 0) {
+    await message.reply(`✅ Đã nhận ${ticket}. Chuyển về terminal --manager để resume (ETA <10s).`)
+  } else {
+    await message.reply(`⚠️ Inbox write fail: ${result.stderr}. Fallback: dán nội dung này vào terminal --manager.`)
+  }
+  return  // STOP — không forward sang Claude SDK session
+}
+
+// Không match ticket pattern → chat thường, forward như cũ
 ```
 
-User ngoài whitelist gõ → claudecode-discord filter trước, không forward vào session. Zero cost.
+**Lưu ý:** `INBOX_DIR` cần config per-channel (từ `/register` hoặc env mapping). Nếu bot chạy trên máy khác dev → `INBOX_DIR` cần là shared location (NFS, rsync target, hoặc dev commit lên git ngắn — v1.11 chọn solution tối giản: bot và dev CÙNG máy, hoặc shared folder qua Dropbox/iCloud. Multi-machine routing là scope v1.12).
 
-## Idempotency + loop prevention
+## Dedup + idempotency
 
-- Bot's own messages: `message.author.id == bot_application_id` → skip. claudecode-discord đã filter self-messages không spawn session; thêm defensive check trong handler.
-- Dev reply nhiều lần: mỗi message xử lý độc lập; ledger `discord_last_processed_message_id` advance monotonically.
-- Handler crash giữa chừng (sau Jira comment post, trước ack reply) → vô hại. Dev không thấy ack nhưng Job E vẫn pick up Jira comment ở tick kế.
+- Mỗi `message_id` chỉ ghi 1 file (`<TICKET>-<message_id>.json`); nếu file đã tồn tại → bot skip ghi, ack "duplicate, đã forward".
+- Bot's own messages (`author.bot === true`) → skip hoàn toàn, không ghi file.
+- User ngoài `ALLOWED_USER_IDS` → bot filter ở Gateway layer, không tới helper.
 
 ## Testing
 
-1. Trigger defer thật (`--auto --discord-defer` với bug confidence thấp) → thấy Discord ping.
-2. **Q&A test**: reply `AAP-123 plan là gì?` → bot reply trong 10s với plan từ ledger. Không trigger resume.
-3. **Resume test**: reply `AAP-123 chọn phương án B` → bot ack + post Jira. Máy dev's --manager tick resume.
-4. **Review test**: reply `AAP-123 không fix, review` → bot ack + post Jira `@claude review`.
-5. **Context push test**: reply `AAP-123 kèm log` + attach file → bot ack + save file. Confirm `.jira-bug/discord-attachments/AAP-123/` có file.
-6. **Negative**: reply `AAP-999` cho ticket không-defer → bot info-reply không side-effect.
-
-## Push mode spawn chi tiết (v1.10+)
-
-Khi Resume intent được chọn + `JIRA_BUG_DISCORD_PUSH != 0`:
-
-**Bước 1 — Dedup check + concurrency cap (default 3):**
-```bash
-# Đọc .jira-bug/active-resumes.json (local, không BGMEM)
-# Format: {"<KEY>": {"pid": 12345, "spawned_at": "2026-10-16T20:30:00Z", "log": ".jira-bug/resume-logs/<KEY>-<ts>.log"}}
-# Trước tiên: cleanup stale entries (kill -0 <pid> fail → xoá entry)
-
-# (a) Per-ticket dedup:
-# Nếu entry cho <KEY> tồn tại + pid alive → skip spawn, reply "⏳ Đang có fix session cho {KEY} (pid X). Chờ xong hoặc kill nếu stuck."
-
-# (b) Global concurrency cap (default MAX=3, overrideable qua env JIRA_BUG_DISCORD_PUSH_MAX=<N>):
-# count = len(active-resumes.json entries after cleanup)
-# Nếu count >= MAX → skip spawn, Jira comment vẫn đã post ở Bước 2 (audit trail + fallback).
-# Reply: "⏳ Đã đạt giới hạn {MAX}/{MAX} fix sessions đồng thời.
-#          Ticket {KEY} sẽ xử lý qua --manager Job E ở tick kế (ETA ~10 min).
-#          Đang chạy: {list keys đang active}.
-#          Giảm cap: `kill <pid>` một session cũ nếu urgent."
-```
-
-Note thứ tự: Bước 2 (post Jira) chạy TRƯỚC Bước 1 cap check — đảm bảo cap-reject vẫn có fallback qua Job E. Pseudo-code order:
-```
-write clarify-file → post Jira @claude  →  dedup check → cap check → spawn (hoặc skip với ack phù hợp)
-```
-
-**Bước 2 — Write clarify + post Jira (giữ v1.9 behavior):**
-- Ghi `.jira-bug/clarify-<KEY>.md` với `{reply_body}`
-- Post Jira comment `@claude {reply_body}` qua `[REST]` (audit trail + fallback cho dev khác chạy --manager)
-
-**Bước 3 — Spawn background session:**
-```bash
-LOG_PATH=".jira-bug/resume-logs/<KEY>-$(date +%Y%m%d-%H%M%S).log"
-mkdir -p .jira-bug/resume-logs
-nohup claude -p "/jira-bug-analyzer <KEY> --resume-from-defer --auto" > "$LOG_PATH" 2>&1 &
-SPAWN_PID=$!
-disown
-```
-- `nohup` + `&` + `disown` → session detach khỏi bot process, chạy độc lập.
-- `claude -p` = print mode (headless, one-shot). Session xử lý Phase 3-6 rồi exit.
-- Log file giữ output cho debug sau.
-
-**Bước 4 — Record pid:**
-- Update `.jira-bug/active-resumes.json` với entry `{pid, spawned_at, log}` cho `<KEY>`.
-- Khi spawned session exit (success/fail), nó tự xoá entry trong Phase 6 cleanup OR next spawn attempt detect stale pid + cleanup.
-
-**Bước 5 — Ack Discord:**
-```
-Hiểu là: resume · {TICKET_KEY}
-✅ Spawn fix session pid {SPAWN_PID} · ETA 5-30 min
-Log: {LOG_PATH}
-```
-
-**Error handling:**
-- `claude` CLI không trong PATH → reply error "⚠️ claude CLI not found. Push mode disabled, dùng --manager fallback."
-- Spawn thành công nhưng session crash: log file có stderr; next reply reset dedup lock. Dev kiểm tra log.
-- Dev kill thủ công: `kill $(jq -r '."<KEY>".pid' .jira-bug/active-resumes.json)` + xoá entry.
+1. Trigger defer thật (`--auto --discord-defer`) → thấy Discord ping đúng format v1.11.
+2. **Resume test:** reply `AAP-123 B` → bot ack ngay <2s. Kiểm `.jira-bug/discord-inbox/AAP-123-<msg_id>.json` tồn tại. Terminal `--manager` log Job G detect + spawn. KHÔNG thấy tool-use trong Discord.
+3. **Chat tự do test:** reply không prefix ticket → bot behave như chat thường (forward Claude SDK hoặc im lặng tuỳ bot config).
+4. **Dedup test:** quote-reply cũ → bot ack "duplicate" + không ghi file 2 lần.
+5. **Attachment test:** reply `AAP-123 log attached` + attach file → inbox file có `attachments[0]` với URL Discord CDN. Job G download riêng khi xử lý.
 
 ## Related
 
-- `phase-manager-mode.md` → Job E Resume/Review/Clarify (fallback khi push mode off hoặc fail)
-- `discord-notify-defer.md` → OUTBOUND defer pair
-- `discord-resolve-watcher.md` → Job F post ✅ Resolved (fallback cho non-push resumes)
-- `phase6-commit-pr.md` → inline Discord post khi `--resume-from-defer` active (bypass Job F)
+- `phase-manager-mode.md` → **Job G: Discord inbox watcher** (consumer side)
+- `discord-notify-defer.md` → OUTBOUND defer pair (producer side)
+- `discord-resolve-watcher.md` → Job F post ✅ Resolved khi PR open
+- `assets/discord-inbox-write.sh` → bot-side helper script
 - `assets/discord-roles.json` → config
-- SKILL.md Mode dispatch → `--resume-from-defer` flag mechanics
 - SKILL.md Golden Rule `[DISCORD-DEFER]`

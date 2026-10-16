@@ -72,6 +72,8 @@ makes KB-backfill reliable independent of watch-file state.
 
 **Then: Discord resolve scan → Job F** (`[DISCORD-DEFER]`, opt-in) — ledger-driven: pull mọi row có `pr_url` present + `resolve_posted_to_discord != true` + `discord_defer_enabled: true` (`[BGMEM]`); per row POST *"✅ Resolved {KEY}: {PR_URL}"* vào `defer_channel_id` qua Discord REST + set `resolve_posted_to_discord: true` + `resolve_posted_at: <ISO>`. Full spec: `references/helpers/discord-resolve-watcher.md`. Skip toàn bộ nếu env `LEARN_APP_DISCORD_BOT_TOKEN` unset. Non-blocking: fail → log + retry tick kế (flag chưa set).
 
+**Then: Discord inbox watcher → Job G** (`[DISCORD-DEFER]` v1.11+, opt-in) — scan folder `.jira-bug/discord-inbox/*.json` cho file `status: pending`; per file: classify intent + act (push-mode spawn hoặc inline resume) + move file sang `processed/`. Đây là consumer side của flow INBOUND inbox-write (producer = claudecode-discord bot ghi file qua `assets/discord-inbox-write.sh`). Chi tiết: Job G section bên dưới. Skip toàn bộ nếu folder không tồn tại HOẶC env `JIRA_BUG_DISCORD_DEFER` unset. Non-blocking: parse fail / spawn fail → log + move file sang `processed/` với `job_g_outcome: error` + continue.
+
 ## Job A — review-comment handling (interactive; `--auto` auto-applies the clear ones)
 The mechanics live in `references/helpers/pr-merge-watcher.md` ("Review-comment poll" +
 "Address review comments"). Manager mode is the orchestrator that runs them. Per PR, while `OPEN`:
@@ -190,6 +192,54 @@ Chỉ chạy nếu env `LEARN_APP_DISCORD_BOT_TOKEN` set. Spec: `references/help
 
 Race giữa 2 máy cùng chạy `--manager` cho project → cả 2 có thể post. Chấp nhận (Discord noise acceptable); atomic set flag ở BGMEM đảm bảo không post 3+ lần.
 
+## Job G — Discord inbox watcher (`[DISCORD-DEFER]` v1.11+, inbound replies → push-mode spawn)
+
+Consumer side của flow INBOUND inbox-write (producer = claudecode-discord bot, qua `assets/discord-inbox-write.sh`). Lý do pivot v1.11 từ bot-side spawn: tool-use của Skill `jira-bug-analyzer` hiện lù lù trong Discord channel (observed AAP729-42) — user không muốn. Job G kéo spawn về terminal `--manager`, Discord thuần relay. Full spec file schema + flow: `references/helpers/discord-resume-handler.md`.
+
+**Skip toàn bộ** nếu folder `.jira-bug/discord-inbox/` không tồn tại HOẶC env `JIRA_BUG_DISCORD_DEFER` unset (= opt-in off).
+
+### Scan + classify
+1. `ls .jira-bug/discord-inbox/*.json` (loại trừ `processed/`) — mỗi file 1 reply đang pending.
+2. Per file, đọc + parse JSON schema `v1.11` (`content_stripped` là intent payload).
+3. Classify intent (regex trên `content_stripped`, case-insensitive, Unicode-normalize):
+
+| Pattern (`content_stripped`) | Intent | Action |
+|---|---|---|
+| `^[A-C]$` (chỉ 1 chữ cái) | **plan-pick** | Resume với plan option được chọn |
+| `^@claude\s+fix` hoặc `fix\|làm đi\|proceed\|tiến hành` | **resume-fix** | Resume fix với context hiện tại |
+| `^@claude\s+review` hoặc `review\|chỉ review` | **review** | Chuyển sang Reviewing + Job E Review branch |
+| `^close\s+` | **close** | Transition → `Won't Fix`/`Invalid` + comment lý do |
+| anything else | **clarify** | Dev gửi info/câu trả lời/link → post Jira comment + re-analyze |
+
+**Ambiguous → default `clarify`** (an toàn — re-analyze với context mới, không auto-fix mù).
+
+### Act per intent
+- **plan-pick / resume-fix / clarify (có đủ info để fix):**
+  - **Push-mode default** (`JIRA_BUG_DISCORD_PUSH != 0`, default ON — giữ speed theo lựa chọn của user ở v1.10):
+    1. Post Jira comment `[VN]` audit trail: *"Nhận chỉ đạo qua Discord từ `{author_name}`: `{content_stripped}`. Spawn fix session."*
+    2. Write clarify-file `.jira-bug/clarify-<KEY>.md` chứa `{content_stripped}` + intent + plan-pick nếu có.
+    3. Dedup check `.jira-bug/active-resumes.json` — ticket đã có pid alive → skip spawn + ack trong `job_g_outcome: skipped-dedup`.
+    4. Concurrency cap check (default MAX=3, env `JIRA_BUG_DISCORD_PUSH_MAX`) — vượt → skip spawn + fallback qua Job E tick kế + `job_g_outcome: skipped-cap`.
+    5. Spawn: `nohup claude -p "/jira-bug-analyzer <KEY> --resume-from-defer --auto" > .jira-bug/resume-logs/<KEY>-<ts>.log 2>&1 &` + record `{pid, spawned_at, log}` vào `active-resumes.json`.
+    6. Post Discord confirmation vào `defer_channel_id` (reply vào `message_id` gốc nếu có): *"🚀 Đã spawn fix session cho {KEY} (pid {X}, ETA 5-30 min). Log: {LOG_PATH}"*.
+    7. `job_g_outcome: spawned`.
+  - **Legacy mode** (`JIRA_BUG_DISCORD_PUSH=0`): chỉ post Jira comment, không spawn. Job E tick kế pick up. `job_g_outcome: inline-resumed`.
+- **review:** post Jira comment `[VN]` + chuyển ticket → `Reviewing`, xoá ledger row defer, Job E Review branch takeover. Discord confirmation: *"👀 Đã chuyển {KEY} sang Reviewing."* `job_g_outcome: review-queued`.
+- **close:** transition → `Won't Fix` (hoặc status đóng gần nhất) + comment lý do + xoá ledger row. Discord: *"🚫 Đã close {KEY}: {lý do}."* `job_g_outcome: closed`.
+
+### Move file sau xử lý
+- Append field `processed_at: <ISO>` + `job_g_outcome: <outcome>` + `job_g_message: <action summary>` vào JSON.
+- Move `<KEY>-<msg_id>.json` → `processed/<KEY>-<msg_id>.json` atomic (`mv`).
+- Lỗi mv → file ở lại inbox + log; tick kế retry (`job_g_outcome: error` không ngăn retry nếu move fail).
+
+### Idempotency
+- Mỗi message_id chỉ xử lý 1 lần — scan skip file đã có `processed_at` field (phòng crash giữa chừng).
+- Dedup `active-resumes.json` chặn spawn 2 lần cùng ticket.
+- Race 2 máy cùng chạy `--manager` cho project: inbox file lock đơn giản — máy nào mv file trước thì xử lý; máy kia thấy file biến mất → skip.
+
+### `[SHEET]`
+Job G vẫn chạy — inbox là Discord-driven, không phụ thuộc Jira/Sheet source. `plan-pick`/`close` cần transition thì n/a với Sheet; thay bằng update sheet row + Discord confirmation.
+
 ## Honest expectation (state it; don't overpromise)
 The self-armed `/loop` rides on `CronCreate`, which is **not a background daemon** — it fires only
 while a Claude session is open and idle (see `pr-merge-watcher.md` → "How the watcher actually
@@ -207,6 +257,7 @@ Print a concise summary and end the pass (do NOT `CronDelete` the manager loop �
 - 📊 **Auto-fix quality (Job D):** `<total auto-fixed> fixed · <reopened> reopened · reopen-rate <pct>%` + any newly-reopened keys.
 - 💬 **Deferred resumed (Job E):** `<K comment xử lý>` — `<X resumed> · <Y review-requested> · <Z clarify-posted>` + per-ticket key.
 - ✅ **Discord resolve posts (Job F, `[DISCORD-DEFER]`):** `<N tickets posted>` + per-ticket key → PR link. Skip nếu env unset.
+- 📥 **Discord inbox (Job G, `[DISCORD-DEFER]` v1.11+):** `<N files xử lý>` — `<spawned> spawned · <inline> inline · <skipped> dedup/cap · <errors> error` + per-ticket key → outcome. Skip nếu folder không có hoặc env unset.
 - ⚠️ Anything surfaced (un-pushed memory, unreadable PR, arming failure).
 
 Errors → `references/helpers/troubleshooting.md`. Invariants: `[REST]` (Jira reads/replies),
