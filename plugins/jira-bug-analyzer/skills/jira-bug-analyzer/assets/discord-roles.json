@@ -1,0 +1,16 @@
+{
+  "_doc": "Role → Discord user_id mapping cho feature discord-bidirectional-defer. LLM pick role dựa context bug khi defer. defer_channel_id = channel text đã /register trong claudecode-discord cho project này. Bot token KHÔNG lưu đây — đọc từ env LEARN_APP_DISCORD_BOT_TOKEN (hoặc BOT_TOKEN_DISCORD_DEFER nếu dev override) — xem Golden Rule [DISCORD-DEFER] trong SKILL.md.",
+  "defer_channel_id": "1560595714386567169",
+  "defer_channel_name": "jira-bug-analyzer",
+  "guild_id": "1476773352130740375",
+  "roles": {
+    "po": "885416107601723423",
+    "dev": "703224453185929327",
+    "qa": "1198956639571673231"
+  },
+  "role_hints": {
+    "po": "Decision về sản phẩm/UX/business/spec ambiguity",
+    "dev": "Decision về technical implementation/code/architecture (default fallback)",
+    "qa": "Decision về repro steps/test coverage/edge cases"
+  }
+}

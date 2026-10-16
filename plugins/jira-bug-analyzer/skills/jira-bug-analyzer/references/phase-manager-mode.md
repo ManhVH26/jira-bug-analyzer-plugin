@@ -135,6 +135,7 @@ Khi fix flow defer một ticket (`auto-plan-pick.md` → "Khi defer"), ticket v�
 ### Scope + filter
 - **Chỉ** ticket có ledger row `analyzed-deferred` (xem schema trong `references/helpers/auto-plan-pick.md` → "Ledger row schema").
 - **Marker:** comment body chứa `@claude` HOẶC `@agent`. Regex: `\B@(claude|agent)\b` (word-boundary, case-insensitive). Tránh false-positive với email `@claude@domain`.
+- **Nguồn comment:** Jira comment thường (dev reply trực tiếp trên Jira UI) HOẶC Jira comment do `references/helpers/discord-resume-handler.md` post hộ user khi dev reply trong Discord `#jira-bug-analyzer` (xem SKILL.md Golden Rule `[DISCORD-DEFER]`). Job E xử lý giống nhau — nguồn Jira là authoritative.
 - **Author filter:** comment author ≠ token owner (`/myself.accountId`). Loại self-loop khi agent reply.
 - **Cursor filter:** chỉ xét comment có `id > commentsCursor` của ledger row (missing/`0` → scan toàn bộ history).
 - Nhiều comment khớp trong 1 tick → **chỉ xử lý comment ID lớn nhất** (dev biết comment sau override comment trước). Advance cursor skip qua các comment trung gian.
