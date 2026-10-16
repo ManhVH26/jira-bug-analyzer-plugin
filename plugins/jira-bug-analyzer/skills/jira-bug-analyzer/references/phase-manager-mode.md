@@ -43,6 +43,21 @@ recurring loop is armed for this board+phase — idempotently, via a marker file
    entry re-arms at the new cadence and rewrites the marker. **To stop the loop:** `CronDelete <cronId>`
    (from the marker) + delete the marker. Only stop when the dev asks.
 
+### Discord inbox file-watch arm (`[DISCORD-DEFER]` v1.11+, realtime Job G)
+
+Trong CÙNG entry (sau step 2 ở trên), nếu env `JIRA_BUG_DISCORD_DEFER=1`:
+- `mkdir -p .jira-bug/discord-inbox` + `mkdir -p .jira-bug/discord-inbox/processed` (idempotent, không fail nếu đã có).
+- Arm Monitor tool (deferred — load qua `ToolSearch select:Monitor`) để watch folder cho file `.json` mới. Command gợi ý:
+  ```bash
+  while sleep 2; do find .jira-bug/discord-inbox -maxdepth 1 -name "*.json" -newer .jira-bug/discord-inbox/.watch-stamp -print 2>/dev/null; touch .jira-bug/discord-inbox/.watch-stamp; done
+  ```
+  (hoặc `fswatch -0 .jira-bug/discord-inbox` nếu máy có `brew install fswatch`).
+- Monitor emit mỗi file mới (1 path per stdout line) như notification; nhận notification → fire 1 **inline Job G tick** chỉ cho file đó (xem Job G section), KHÔNG chờ cron tick kế.
+- Latency file → spawn fix: typically <5s.
+- Monitor crash / interrupt → cron tick 10 min vẫn pick up (defense-in-depth, Job G scan whole folder mỗi tick).
+- Ghi marker `.jira-bug/discord-inbox-watch.json` `{ "monitor_shell_id": "<id>", "armed_at": "<ISO>" }` để tránh double-arm.
+- `JIRA_BUG_DISCORD_DEFER` chưa set → skip arm (im lặng).
+
 > `--auto` does NOT change this — the loop is always armed; `--auto` only governs Job A's auto-apply.
 
 ## The reconcile pass (one pass per loop fire — then end the pass, the /loop re-fires)
@@ -198,8 +213,12 @@ Consumer side của flow INBOUND inbox-write (producer = claudecode-discord bot,
 
 **Skip toàn bộ** nếu folder `.jira-bug/discord-inbox/` không tồn tại HOẶC env `JIRA_BUG_DISCORD_DEFER` unset (= opt-in off).
 
+### 2 trigger paths (realtime + fallback)
+- **Realtime (file-watch Monitor, v1.11.1+):** Monitor armed ở self-arm section emit path `<new_file>` → fire 1 **inline Job G tick** cho CHỈ file đó (Scan step bỏ qua, dùng path thẳng từ event). Latency < 5s.
+- **Cron fallback (every /loop tick, default 10 min):** Scan toàn folder (lệnh `ls` dưới) để pick up file sót (Monitor crash, bot ghi lúc --manager chưa entry, race). Logic sau đây áp dụng cho mỗi file tìm được.
+
 ### Scan + classify
-1. `ls .jira-bug/discord-inbox/*.json` (loại trừ `processed/`) — mỗi file 1 reply đang pending.
+1. `ls .jira-bug/discord-inbox/*.json` (loại trừ `processed/` + `.watch-stamp`) — mỗi file 1 reply đang pending. Realtime path bỏ qua step này, nhảy thẳng vào step 2 với path đã có.
 2. Per file, đọc + parse JSON schema `v1.11` (`content_stripped` là intent payload).
 3. Classify intent (regex trên `content_stripped`, case-insensitive, Unicode-normalize):
 
