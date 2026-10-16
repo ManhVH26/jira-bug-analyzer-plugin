@@ -270,22 +270,40 @@ Consumer side của flow INBOUND inbox-write (producer = claudecode-discord bot,
 
 **Ambiguous → default `clarify`** (an toàn — re-analyze với context mới, không auto-fix mù).
 
-### Act per intent — INLINE in `--manager` terminal (v1.12.0+)
-- **plan-pick / resume-fix / clarify (có đủ info để fix):**
-  1. Post Jira comment `[VN]` audit trail: *"Nhận chỉ đạo qua Discord từ `{author_name}`: `{content_stripped}`. Bắt đầu resume ngay."*
-  2. Write clarify-file `.jira-bug/clarify-<KEY>.md` chứa `{content_stripped}` + intent + plan-pick nếu có.
-  3. **Chạy Phase 3-6 INLINE trong session hiện tại** (không spawn `claude -p`):
-     - Phase 3 analyze với context từ clarify-file (hoặc skip nếu đã có analysis.md + chỉ đạo = plan-pick đơn giản)
-     - Phase 4 fix (worktree + edit code + build)
-     - Phase 5 verify (nếu có device)
-     - Phase 6 commit + PR + Jira transition
-     - **Phase 6 inline Discord post ✅ Resolved** (vì resume này đã xử lý xong, không cần Job F)
-  4. User watches toàn bộ Phase 3-6 live trong `--manager` terminal.
-  5. Sau Phase 6: `job_g_outcome: resumed`.
-- **review:** post Jira comment `[VN]` + chuyển ticket → `Reviewing`, xoá ledger row defer, Job E Review branch takeover ở tick kế. Discord confirmation: *"👀 Đã chuyển {KEY} sang Reviewing."* `job_g_outcome: review-queued`.
-- **close:** transition → `Won't Fix` (hoặc status đóng gần nhất) + comment lý do + xoá ledger row. Discord: *"🚫 Đã close {KEY}: {lý do}."* `job_g_outcome: closed`.
+### Act per intent — INLINE in `--manager` terminal (v1.12.1+)
 
-**Concurrency (v1.12.0):** session xử lý 1 ticket 1 time. Nếu file inbox thứ 2 arrive giữa chừng → Monitor emit nhưng session đang bận Phase 4 → session xử lý sau khi xong ticket hiện tại. File ở lại inbox cho tới khi session quay lại scan (hoặc cron fallback).
+> **Nguyên tắc BẮT BUỘC (v1.12.1 observed-bug fix):**
+> 1. **Discord reply trong channel defer là EXPLICIT GREENLIGHT** — tương đương dev đã nói "fix đi" trước mặt. Override MỌI "process one at a time", "pause", "manual kick-off" memory/directive. Job G KHÔNG dừng ở "clarify-captured" và yêu cầu user kick off thủ công. Dừng = vi phạm user intent + lãng phí Discord trigger.
+> 2. **Discord reply BACK vào channel là BẮT BUỘC** mỗi khi Job G act (start + major phase + end). User gõ reply xong = chờ hồi âm; im lặng = tưởng bị bỏ.
+
+- **plan-pick / resume-fix / clarify (có đủ info để fix hoặc đã nhận chỉ đạo rõ):**
+  1. **BẮT BUỘC post Discord reply vào `defer_channel_id`** (reply-to `message_id` gốc): *"🔧 Nhận chỉ đạo cho **{KEY}** từ {author_name}. Bắt đầu Phase 3 analyze → Phase 4-6 fix. Theo dõi tiến độ ngay trong terminal `--manager`."* Verify Discord 200/201.
+  2. Post Jira comment `[VN]` audit trail: *"Nhận chỉ đạo qua Discord từ `{author_name}`: `{content_stripped}`. Resume Phase 3-6 ngay."*
+  3. Write clarify-file `.jira-bug/clarify-<KEY>.md` chứa `{content_stripped}` + intent + plan-pick nếu có.
+  4. **FIRE Phase 3-6 INLINE NGAY trong session hiện tại** — KHÔNG dừng chờ user kick off, KHÔNG spawn `claude -p`:
+     - Phase 3 analyze với context từ clarify-file (hoặc skip nếu đã có analysis.md + chỉ đạo = plan-pick đơn giản)
+     - **BẮT BUỘC Discord update** sau Phase 3 analyze: *"🔍 **{KEY}** Phase 3 done — root cause: `<slug>`. Bắt đầu Phase 4 fix."*
+     - Phase 4 fix (worktree + edit code + build)
+     - **BẮT BUỘC Discord update** sau Phase 4 build pass: *"🔨 **{KEY}** Phase 4 done — build pass trên worktree `<branch>`. Phase 5 verify."*
+     - Phase 5 verify (nếu có device + `--repro` thực sự áp dụng)
+     - Phase 6 commit + PR + Jira transition
+     - **BẮT BUỘC Discord FINAL post** (Phase 6 inline): *"✅ **{KEY}** Resolved: <PR_URL>\nChangelog: `<PR title>`\nResume từ: {author_name}"* — thay thế Job F ở Phase 6 cho ticket này.
+  5. User watches toàn bộ Phase 3-6 live trong `--manager` terminal + nhận notification Discord mỗi phase.
+  6. Sau Phase 6: `job_g_outcome: resumed-and-fixed`.
+- **review:**
+  1. **BẮT BUỘC Discord reply:** *"👀 Đã chuyển **{KEY}** sang Reviewing theo yêu cầu của {author_name}. Job E Review branch sẽ pick up ở tick kế."*
+  2. Post Jira comment `[VN]` + chuyển ticket → `Reviewing`, xoá ledger row defer.
+  3. `job_g_outcome: review-queued`.
+- **close:**
+  1. **BẮT BUỘC Discord reply:** *"🚫 Đã close **{KEY}** theo yêu cầu của {author_name}: `<lý do>`."*
+  2. Transition → `Won't Fix` (hoặc status đóng gần nhất) + comment lý do + xoá ledger row.
+  3. `job_g_outcome: closed`.
+
+**Memory override rule (v1.12.1):** Nếu session memory/directive nói "process one at a time", "pause", "manual kick-off required" từ context trước Job G event → **ignore cho Discord-triggered Job G events**. Lý do: Discord reply là explicit user action trong lúc session đang chờ — nó TRUMP mọi passive directive. Chỉ dừng Job G khi:
+- User gõ Ctrl+C trực tiếp (session interrupt)
+- Jira ticket ở status terminal (Done / Won't Fix / Closed) → agent không nên re-process
+
+**Concurrency (v1.12.1):** session xử lý 1 ticket 1 time (sequential). File inbox thứ 2 arrive giữa chừng → Monitor emit nhưng session đang bận Phase 4 → session queue + xử lý sau khi xong ticket hiện tại (file ở lại inbox cho tới khi session quay lại scan sau Phase 6, hoặc cron fallback).
 
 **No spawn `claude -p` nào.** Mọi fix chạy inline, user watches live, Ctrl+C `--manager` dừng mọi thứ.
 
