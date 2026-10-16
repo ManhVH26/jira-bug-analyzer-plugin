@@ -28,7 +28,7 @@ Dựa message body (sau khi strip ticket key) + context từ ledger (fetched BGM
 |---|---|---|
 | **ack-only** | "ok", "noted", "hiểu rồi", emoji phản hồi | Ack nhẹ nhàng, không action thêm |
 | **context Q&A** | Câu hỏi: "plan là gì?", "root cause chỗ nào?", "file nào bị ảnh hưởng?", "@claude explain" | Đọc ledger `summary`+`plan`+`files` + fetch Jira ticket + reply inline (<10s) |
-| **resume command** | "chọn phương án B", "fix", "làm đi", "proceed", "@claude fix", "tiến hành" | Post Jira `@claude {body}` qua `[REST]` + ack "forwarded" (v1.8.0 flow) |
+| **resume command** | "chọn phương án B", "fix", "làm đi", "proceed", "@claude fix", "tiến hành" | **Push mode (v1.10+ default):** write clarify file + post Jira `@claude {body}` + Bash spawn background Claude session `nohup claude -p "/jira-bug-analyzer <KEY> --resume-from-defer --auto" >logs 2>&1 &` + record pid vào `.jira-bug/active-resumes.json` + ack "spawn pid X, ETA 5-30 min". Dedup: cùng KEY đã có pid alive → skip spawn, ack "đã busy". **Legacy mode (set env `JIRA_BUG_DISCORD_PUSH=0`):** chỉ post Jira comment, chờ `--manager` Job E tick (v1.9.0 flow). |
 | **review command** | "won't fix", "không fix", "close", "review", "@claude review" | Post Jira `@claude review {body}` + ack "forwarded for review" |
 | **context push** | Có attachment (log file, screenshot) HOẶC paste code/stack trace dài | Save file/text vào `.jira-bug/discord-attachments/<KEY>/<timestamp>-<filename>` (local nếu central = dev; qua BGMEM nếu khác máy) + ack "received, saved for next analysis cycle" |
 
@@ -82,10 +82,56 @@ User ngoài whitelist gõ → claudecode-discord filter trước, không forward
 5. **Context push test**: reply `AAP-123 kèm log` + attach file → bot ack + save file. Confirm `.jira-bug/discord-attachments/AAP-123/` có file.
 6. **Negative**: reply `AAP-999` cho ticket không-defer → bot info-reply không side-effect.
 
+## Push mode spawn chi tiết (v1.10+)
+
+Khi Resume intent được chọn + `JIRA_BUG_DISCORD_PUSH != 0`:
+
+**Bước 1 — Dedup check:**
+```bash
+# Đọc .jira-bug/active-resumes.json (local, không BGMEM)
+# Format: {"<KEY>": {"pid": 12345, "spawned_at": "2026-10-16T20:30:00Z", "log": ".jira-bug/resume-logs/<KEY>-<ts>.log"}}
+# Nếu entry tồn tại + kill -0 <pid> OK → skip spawn, reply "⏳ Đang có fix session cho {KEY} (pid X). Chờ xong hoặc kill nếu stuck."
+# Nếu entry tồn tại + pid dead → cleanup entry, continue
+```
+
+**Bước 2 — Write clarify + post Jira (giữ v1.9 behavior):**
+- Ghi `.jira-bug/clarify-<KEY>.md` với `{reply_body}`
+- Post Jira comment `@claude {reply_body}` qua `[REST]` (audit trail + fallback cho dev khác chạy --manager)
+
+**Bước 3 — Spawn background session:**
+```bash
+LOG_PATH=".jira-bug/resume-logs/<KEY>-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p .jira-bug/resume-logs
+nohup claude -p "/jira-bug-analyzer <KEY> --resume-from-defer --auto" > "$LOG_PATH" 2>&1 &
+SPAWN_PID=$!
+disown
+```
+- `nohup` + `&` + `disown` → session detach khỏi bot process, chạy độc lập.
+- `claude -p` = print mode (headless, one-shot). Session xử lý Phase 3-6 rồi exit.
+- Log file giữ output cho debug sau.
+
+**Bước 4 — Record pid:**
+- Update `.jira-bug/active-resumes.json` với entry `{pid, spawned_at, log}` cho `<KEY>`.
+- Khi spawned session exit (success/fail), nó tự xoá entry trong Phase 6 cleanup OR next spawn attempt detect stale pid + cleanup.
+
+**Bước 5 — Ack Discord:**
+```
+Hiểu là: resume · {TICKET_KEY}
+✅ Spawn fix session pid {SPAWN_PID} · ETA 5-30 min
+Log: {LOG_PATH}
+```
+
+**Error handling:**
+- `claude` CLI không trong PATH → reply error "⚠️ claude CLI not found. Push mode disabled, dùng --manager fallback."
+- Spawn thành công nhưng session crash: log file có stderr; next reply reset dedup lock. Dev kiểm tra log.
+- Dev kill thủ công: `kill $(jq -r '."<KEY>".pid' .jira-bug/active-resumes.json)` + xoá entry.
+
 ## Related
 
-- `phase-manager-mode.md` → Job E Resume/Review/Clarify (pick up Jira comment)
-- `discord-notify-defer.md` → OUTBOUND pair
-- `discord-resolve-watcher.md` → post ✅ Resolved khi PR open
+- `phase-manager-mode.md` → Job E Resume/Review/Clarify (fallback khi push mode off hoặc fail)
+- `discord-notify-defer.md` → OUTBOUND defer pair
+- `discord-resolve-watcher.md` → Job F post ✅ Resolved (fallback cho non-push resumes)
+- `phase6-commit-pr.md` → inline Discord post khi `--resume-from-defer` active (bypass Job F)
 - `assets/discord-roles.json` → config
+- SKILL.md Mode dispatch → `--resume-from-defer` flag mechanics
 - SKILL.md Golden Rule `[DISCORD-DEFER]`
