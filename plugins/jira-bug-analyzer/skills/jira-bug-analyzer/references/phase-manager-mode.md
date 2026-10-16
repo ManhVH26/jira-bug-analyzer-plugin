@@ -1,9 +1,10 @@
-# Manager mode — PR-watch reconcile + KB-backfill (`--manager <PROJECT-KEY>`)
+# Manager mode — PR-watch reconcile + KB-backfill + Deferred-ticket comment watcher (`--manager <PROJECT-KEY>`)
 
 > A standalone **maintenance loop**, NOT part of the fix pipeline (Phases 1–6). It does the
 > post-fix housekeeping the fix flow defers: surface & fix **PR review comments**, **clean up
-> worktrees** on merge/close, **backfill the knowledge base** for tickets that reached Done, and
-> **track the reopen outcome of `--auto` fixes** (Job D — the auto-fix quality metric).
+> worktrees** on merge/close, **backfill the knowledge base** for tickets that reached Done,
+> **track the reopen outcome of `--auto` fixes** (Job D — the auto-fix quality metric), and
+> **chủ động watch comment trên ticket deferred** (Job E — dev reply trên Jira với marker `@claude`/`@agent` thì Job E tự fetch + xử lý).
 > **`--manager` ALWAYS runs as a recurring `/loop` — never a bare one-shot.** On entry the mode
 > **self-arms a `/loop` (default every 10 min)** for this board+phase, then runs ONE reconcile pass;
 > each loop fire = one more pass. The dev never has to re-run it manually — the loop keeps
@@ -67,6 +68,8 @@ makes KB-backfill reliable independent of watch-file state.
 
 **Then: `auto-fixed`-label scan → Job D** — a read-only `jira_search` for `labels = auto-fixed` (this board/phase) whose ledger `auto_eval` is still `pending` or may have changed → **Job D** (reopen-outcome tracking). Independent of watch-file/Done state.
 
+**Then: deferred-ticket comment scan → Job E** — ledger-driven: pull mọi row `analyzed-deferred` (`[BGMEM]`), batch 1 `jira_search` để lọc ticket có `updated > <earliest commentsCursor timestamp>`, rồi fetch comment per ticket. Independent của PR state / Done state.
+
 ## Job A — review-comment handling (interactive; `--auto` auto-applies the clear ones)
 The mechanics live in `references/helpers/pr-merge-watcher.md` ("Review-comment poll" +
 "Address review comments"). Manager mode is the orchestrator that runs them. Per PR, while `OPEN`:
@@ -125,6 +128,55 @@ Fills in the reopen outcome for tickets `--auto` stamped `auto-fixed` (Phase 6) 
 
 KB stays English; per `[VN]` only dev-facing prompts (none here — Job C asks nothing) are Vietnamese.
 
+## Job E — Deferred-ticket comment watcher (chủ động watch comment, re-analyze khi dev reply)
+
+Khi fix flow defer một ticket (`auto-plan-pick.md` → "Khi defer"), ticket về `Request` + ledger row `analyzed-deferred` + comment `[VN]` giải thích. Trước đây dev phải re-run pipeline mới pick lại. Job E thay thế: chủ động poll comment trên ticket deferred, parse chỉ đạo của dev, re-analyze / chuyển `Reviewing` / hỏi lại.
+
+### Scope + filter
+- **Chỉ** ticket có ledger row `analyzed-deferred` (xem schema trong `references/helpers/auto-plan-pick.md` → "Ledger row schema").
+- **Marker:** comment body chứa `@claude` HOẶC `@agent`. Regex: `\B@(claude|agent)\b` (word-boundary, case-insensitive). Tránh false-positive với email `@claude@domain`.
+- **Author filter:** comment author ≠ token owner (`/myself.accountId`). Loại self-loop khi agent reply.
+- **Cursor filter:** chỉ xét comment có `id > commentsCursor` của ledger row (missing/`0` → scan toàn bộ history).
+- Nhiều comment khớp trong 1 tick → **chỉ xử lý comment ID lớn nhất** (dev biết comment sau override comment trước). Advance cursor skip qua các comment trung gian.
+
+### Intent parsing (keyword, case-insensitive, Unicode-normalize với/không dấu)
+- **Resume** — chứa 1 trong: `fix`, `proceed`, `tiến hành`, `tien hanh`, `làm`, `lam`, `sửa`, `sua`, `chạy`, `chay`, `go ahead`
+- **Review** — chứa 1 trong: `won't fix`, `không fix`, `khong fix`, `close`, `đóng`, `dong`, `bỏ qua`, `bo qua`, `review`, `cần review`, `can review`
+- **Ambiguous** (không match cả 2) → Clarify branch
+
+Resume + Review cùng khớp → ưu tiên **Review** (an toàn hơn, dev vẫn có thể reply thêm `@claude fix` nếu đổi ý).
+
+### Resume branch
+1. **Xoá ledger row** `analyzed-deferred` cho ticket (`[BGMEM]`).
+2. **Ghi `.jira-bug/clarify-<KEY>.md`** với nguyên văn comment body (Phase 3 Fix-5 Clarify sẽ đọc như clarify answer).
+3. **Dispatch Phase 3 → 6** cho ticket đó:
+   - `--manager --auto` → full auto. Phase 3 re-score với clarify-file. Score đủ → fix + PR. Không đủ → defer lại với reason mới + ghi report (ledger row mới, `commentsCursor` cũ KHÔNG kế thừa — ticket deferred lần này là context mới).
+   - `--manager` interactive → post Jira comment `[VN]`: "Đã nhận chỉ đạo. Plan đề xuất: `<N>`. (a) Duyệt fix (b) Sửa plan (c) Defer lại". KHÔNG tự fix. Dừng. Tick sau Job E bắt reply tiếp.
+4. **Advance `commentsCursor`** = comment ID vừa xử lý (ngay cả khi Phase 3 defer lại — vì comment đó đã được "tiêu thụ").
+
+### Review branch
+1. **Transition** ticket → `Reviewing` (`[REST]` `jira_transition` + readback verify `now=Reviewing`).
+   - **Fallback** khi workflow không có status `Reviewing` (transition fail / không tìm thấy transition tên này): giữ nguyên `Request` + add label `needs-review` (`[REST]`) + log 1 dòng warning trong pass summary.
+2. **Update ledger row:** set field `review_requested_by_comment: <commentId>` (giữ nguyên `analyzed-deferred` + các field khác, `[BGMEM]`).
+3. **Post Jira comment** `[VN]` (`[REST]`): *"Đã nhận chỉ đạo không fix. Đã chuyển ticket sang **Reviewing** để team xem lại."* (Nếu fallback label: *"Đã nhận chỉ đạo không fix. Workflow không có status Reviewing, đã gắn label `needs-review` để team notice."*)
+4. **Advance `commentsCursor`** = comment ID vừa xử lý.
+
+### Clarify branch
+1. **Post Jira comment** `[VN]` (`[REST]`) với options rõ ràng: *"Mình chưa rõ ý. Bạn muốn: (a) tiến hành fix — reply `@claude fix` · (b) defer thêm chờ info — không cần reply · (c) không fix, chuyển Reviewing — reply `@claude review`."*
+2. **KHÔNG** transition status.
+3. **KHÔNG** advance cursor — để tick sau bắt reply mới của dev.
+
+### Idempotency
+- `commentsCursor` chỉ advance **SAU KHI** action complete (post Jira ack / transition verify / Phase 3 dispatch). Crash giữa chừng → tick sau retry từ cursor cũ, idempotent vì ledger check vẫn thấy row `analyzed-deferred` (Resume branch) hoặc `review_requested_by_comment` null (Review branch chưa chạy).
+- Trường hợp Resume branch đã xoá ledger row nhưng crash trước khi dispatch Phase 3 → tick sau không còn thấy ticket (ledger row mất) → **không retry**. Mitigation: xoá ledger row là bước CUỐI của Resume branch (sau khi `.jira-bug/clarify-<KEY>.md` đã ghi + Phase 3 đã kick off ở background).
+
+### Mode compliance (`[AUTO]`)
+- **`--auto`:** KHÔNG `AskUserQuestion` inline. Mơ hồ → Clarify branch (comment hỏi trên Jira — kênh async, không block loop). Resume branch dưới `--auto` tự fix hoặc tự defer theo rubric, không hỏi dev.
+- **Interactive:** Jira comment là channel giao tiếp chính (dev có thể không ngồi trước terminal lúc /loop tick). Resume branch chỉ post plan đề xuất + options, không `AskUserQuestion` (session có thể idle). Tick sau sẽ bắt reply.
+
+### `[SHEET]` (google-sheet board)
+Job E **n/a** — sheet không có comment thread per bug. Report `Job E: n/a (google-sheet board)` trong pass summary.
+
 ## Honest expectation (state it; don't overpromise)
 The self-armed `/loop` rides on `CronCreate`, which is **not a background daemon** — it fires only
 while a Claude session is open and idle (see `pr-merge-watcher.md` → "How the watcher actually
@@ -140,6 +192,7 @@ Print a concise summary and end the pass (do NOT `CronDelete` the manager loop �
 - 📚 **KB**: upserted (`<category>/<slug>`), bumped (`<slug>`), skipped (app-specific).
 - 🔎 **Orphan Done tickets** backfilled from the board scan.
 - 📊 **Auto-fix quality (Job D):** `<total auto-fixed> fixed · <reopened> reopened · reopen-rate <pct>%` + any newly-reopened keys.
+- 💬 **Deferred resumed (Job E):** `<K comment xử lý>` — `<X resumed> · <Y review-requested> · <Z clarify-posted>` + per-ticket key.
 - ⚠️ Anything surfaced (un-pushed memory, unreadable PR, arming failure).
 
 Errors → `references/helpers/troubleshooting.md`. Invariants: `[REST]` (Jira reads/replies),
