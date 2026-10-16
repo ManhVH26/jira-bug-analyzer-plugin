@@ -123,8 +123,8 @@ Fills in the reopen outcome for tickets `--auto` stamped `auto-fixed` (Phase 6) 
    - **Reopened after the auto-fix** (moved back to `Reopened`/`Request`/`In Progress`, or reopened by QA, on a date AFTER the `[AUTO-FIX EVAL]` resolve date) → add label **`auto-fix-reopened`**, update the `[AUTO-FIX EVAL]` comment's `reopen-outcome: reopened <date>` (`[REST]`), set the ledger row `auto_eval: reopened`.
    - **Held** (still Resolved/Done, or its PR merged, with no reopen) → set ledger `auto_eval: held`; no extra label needed (absence of `auto-fix-reopened` = held).
    - Already recorded (`auto_eval` is `held`/`reopened`, not `pending`) and unchanged → skip.
-3. **Notify a one-line quality roll-up** for the pass: `auto-fix quality: <total auto-fixed> fixed · <reopened> reopened · reopen-rate <pct>%` — the headline metric for evaluating fix quality. Per newly-changed ticket also: `auto-fix reopened: <KEY>` .
-> Eval query for the dev anytime: `labels = auto-fixed` (all) vs `labels = auto-fix-reopened` (bad fixes) → reopen rate = the quality score.
+3. **Notify a one-line quality roll-up** for the pass: `auto-fix quality: <total auto-fixed> fixed · <reopened> reopened · reopen-rate <pct>%` — the headline metric for evaluating fix quality. Per newly-changed ticket also: `auto-fix reopened: <KEY>`. **Also roll up `--auto-low` subset separately** so dev can compare: `auto-fix-low quality: <total auto-fix-low> fixed · <reopened> reopened · reopen-rate <pct>%`. If low-conf reopen-rate is materially higher than overall, that is the signal `--auto-low` is too aggressive for this project.
+> Eval queries for the dev anytime: `labels = auto-fixed` (all) vs `labels = auto-fix-reopened` (bad fixes) → overall reopen rate. `labels = auto-fix-low` vs `labels = auto-fix-reopened AND labels = auto-fix-low` → low-conf reopen rate.
 
 KB stays English; per `[VN]` only dev-facing prompts (none here — Job C asks nothing) are Vietnamese.
 
