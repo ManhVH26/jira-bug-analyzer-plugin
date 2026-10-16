@@ -86,12 +86,27 @@ User ngoài whitelist gõ → claudecode-discord filter trước, không forward
 
 Khi Resume intent được chọn + `JIRA_BUG_DISCORD_PUSH != 0`:
 
-**Bước 1 — Dedup check:**
+**Bước 1 — Dedup check + concurrency cap (default 3):**
 ```bash
 # Đọc .jira-bug/active-resumes.json (local, không BGMEM)
 # Format: {"<KEY>": {"pid": 12345, "spawned_at": "2026-10-16T20:30:00Z", "log": ".jira-bug/resume-logs/<KEY>-<ts>.log"}}
-# Nếu entry tồn tại + kill -0 <pid> OK → skip spawn, reply "⏳ Đang có fix session cho {KEY} (pid X). Chờ xong hoặc kill nếu stuck."
-# Nếu entry tồn tại + pid dead → cleanup entry, continue
+# Trước tiên: cleanup stale entries (kill -0 <pid> fail → xoá entry)
+
+# (a) Per-ticket dedup:
+# Nếu entry cho <KEY> tồn tại + pid alive → skip spawn, reply "⏳ Đang có fix session cho {KEY} (pid X). Chờ xong hoặc kill nếu stuck."
+
+# (b) Global concurrency cap (default MAX=3, overrideable qua env JIRA_BUG_DISCORD_PUSH_MAX=<N>):
+# count = len(active-resumes.json entries after cleanup)
+# Nếu count >= MAX → skip spawn, Jira comment vẫn đã post ở Bước 2 (audit trail + fallback).
+# Reply: "⏳ Đã đạt giới hạn {MAX}/{MAX} fix sessions đồng thời.
+#          Ticket {KEY} sẽ xử lý qua --manager Job E ở tick kế (ETA ~10 min).
+#          Đang chạy: {list keys đang active}.
+#          Giảm cap: `kill <pid>` một session cũ nếu urgent."
+```
+
+Note thứ tự: Bước 2 (post Jira) chạy TRƯỚC Bước 1 cap check — đảm bảo cap-reject vẫn có fallback qua Job E. Pseudo-code order:
+```
+write clarify-file → post Jira @claude  →  dedup check → cap check → spawn (hoặc skip với ack phù hợp)
 ```
 
 **Bước 2 — Write clarify + post Jira (giữ v1.9 behavior):**
