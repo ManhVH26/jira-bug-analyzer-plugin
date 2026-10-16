@@ -43,20 +43,44 @@ recurring loop is armed for this board+phase — idempotently, via a marker file
    entry re-arms at the new cadence and rewrites the marker. **To stop the loop:** `CronDelete <cronId>`
    (from the marker) + delete the marker. Only stop when the dev asks.
 
-### Discord inbox file-watch arm (`[DISCORD-DEFER]` v1.11+, realtime Job G)
+### Discord inbox watcher daemon arm (`[DISCORD-DEFER]` v1.11.2+, persistent realtime)
+
+> **Vì sao daemon ngoài session, không phải Monitor tool:** v1.11.1 arm Monitor tool trong session → shell nền chết khi session đi idle sau reconcile pass (observed: `bkezneobl` chết sau ~4 phút, Discord reply không được pick up). v1.11.2 pivot: dùng `nohup` detached bash daemon chạy ĐỘC LẬP khỏi `--manager` session — survives idle, session close, Mac logout. Daemon spawn `claude -p` trực tiếp per file, không cần `--manager` session hoạt động.
 
 Trong CÙNG entry (sau step 2 ở trên), nếu env `JIRA_BUG_DISCORD_DEFER=1`:
-- `mkdir -p .jira-bug/discord-inbox` + `mkdir -p .jira-bug/discord-inbox/processed` (idempotent, không fail nếu đã có).
-- Arm Monitor tool (deferred — load qua `ToolSearch select:Monitor`) để watch folder cho file `.json` mới. Command gợi ý:
-  ```bash
-  while sleep 2; do find .jira-bug/discord-inbox -maxdepth 1 -name "*.json" -newer .jira-bug/discord-inbox/.watch-stamp -print 2>/dev/null; touch .jira-bug/discord-inbox/.watch-stamp; done
-  ```
-  (hoặc `fswatch -0 .jira-bug/discord-inbox` nếu máy có `brew install fswatch`).
-- Monitor emit mỗi file mới (1 path per stdout line) như notification; nhận notification → fire 1 **inline Job G tick** chỉ cho file đó (xem Job G section), KHÔNG chờ cron tick kế.
-- Latency file → spawn fix: typically <5s.
-- Monitor crash / interrupt → cron tick 10 min vẫn pick up (defense-in-depth, Job G scan whole folder mỗi tick).
-- Ghi marker `.jira-bug/discord-inbox-watch.json` `{ "monitor_shell_id": "<id>", "armed_at": "<ISO>" }` để tránh double-arm.
-- `JIRA_BUG_DISCORD_DEFER` chưa set → skip arm (im lặng).
+1. `mkdir -p .jira-bug/discord-inbox .jira-bug/discord-inbox/processed .jira-bug/resume-logs` (idempotent).
+2. Đọc `.jira-bug/discord-inbox-watch.json`:
+   - **Marker tồn tại + `pid` alive (`kill -0 <pid>` success)** → skip arm, log *"inbox watcher already running pid=<X>"*.
+   - **Marker absent HOẶC pid dead** → arm daemon mới (step 3).
+3. Arm daemon:
+   ```bash
+   nohup bash <plugin>/assets/discord-inbox-watcher.sh "$(pwd)" \
+     > .jira-bug/discord-inbox-watcher.log 2>&1 &
+   disown $!
+   ```
+   Lấy `<plugin>` qua `${CLAUDE_PLUGIN_ROOT}` (env Claude Code set khi load skill) HOẶC fallback `~/.claude/plugins/marketplaces/apero-tools/plugins/jira-bug-analyzer/skills/jira-bug-analyzer`.
+4. Ghi marker atomic:
+   ```json
+   { "pid": <spawn_pid>, "armed_at": "<ISO>", "project": "<cwd>" }
+   ```
+5. Announce 1 dòng: *"Discord inbox watcher armed — pid=<X>, log=.jira-bug/discord-inbox-watcher.log"*.
+6. **Catchup:** daemon đọc hết file trong `.jira-bug/discord-inbox/*.json` ở startup — các reply tới trong lúc daemon chết sẽ được xử lý ngay (không mất).
+
+**Daemon behavior:**
+- Backend: `fswatch -0` nếu có (zero-latency), poll loop 2s nếu không (`fswatch` thiếu).
+- Per new file: parse ticket từ tên file (`<KEY>-<msgid>.json`) → dedup check `active-resumes.json` → spawn `nohup claude -p "/jira-bug-analyzer <KEY> --resume-from-defer --auto" > logs &` → ghi vào `active-resumes.json` → move file sang `processed/`.
+- Latency file → spawn: < 3s (fswatch) hoặc < 5s (poll).
+- Log daemon activity vào `.jira-bug/discord-inbox-watcher.log` (startup, spawns, errors) để debug sau.
+
+**Cron fallback vẫn giữ** (Job G full-scan ở mỗi `/loop` tick) để pick up file sót trong trường hợp daemon crash giữa 2 lần restart `--manager`.
+
+**Stop daemon:**
+```bash
+kill $(python3 -c "import json; print(json.load(open('.jira-bug/discord-inbox-watch.json'))['pid'])")
+rm .jira-bug/discord-inbox-watch.json
+```
+
+`JIRA_BUG_DISCORD_DEFER` chưa set → skip arm (im lặng).
 
 > `--auto` does NOT change this — the loop is always armed; `--auto` only governs Job A's auto-apply.
 
