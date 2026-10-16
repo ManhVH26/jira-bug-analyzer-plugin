@@ -43,42 +43,56 @@ recurring loop is armed for this board+phase — idempotently, via a marker file
    entry re-arms at the new cadence and rewrites the marker. **To stop the loop:** `CronDelete <cronId>`
    (from the marker) + delete the marker. Only stop when the dev asks.
 
-### Discord inbox watcher daemon arm (`[DISCORD-DEFER]` v1.11.2+, persistent realtime)
+### Discord inbox in-session watcher (`[DISCORD-DEFER]` v1.12.0+, in-terminal realtime)
 
-> **Vì sao daemon ngoài session, không phải Monitor tool:** v1.11.1 arm Monitor tool trong session → shell nền chết khi session đi idle sau reconcile pass (observed: `bkezneobl` chết sau ~4 phút, Discord reply không được pick up). v1.11.2 pivot: dùng `nohup` detached bash daemon chạy ĐỘC LẬP khỏi `--manager` session — survives idle, session close, Mac logout. Daemon spawn `claude -p` trực tiếp per file, không cần `--manager` session hoạt động.
+> **Vì sao in-session, không nohup daemon:** v1.11.2/.3 dùng nohup detached daemon spawn `claude -p` nền → fix progress không hiện trên `--manager` terminal (user báo: "không thấy gì trong --manager, không chạy ngầm"). v1.12.0 pivot: file-watcher chạy TRONG `--manager` session qua `Bash run_in_background: true` + Monitor tool subscribe. Session close → shell + Monitor cùng chết (lifecycle = session). Job G xử lý INLINE trong `--manager` terminal — user watch Phase 3-6 live.
 
 Trong CÙNG entry (sau step 2 ở trên), nếu env `JIRA_BUG_DISCORD_DEFER=1`:
-1. `mkdir -p .jira-bug/discord-inbox .jira-bug/discord-inbox/processed .jira-bug/resume-logs` (idempotent).
+1. `mkdir -p .jira-bug/discord-inbox .jira-bug/discord-inbox/processed` (idempotent).
 2. Đọc `.jira-bug/discord-inbox-watch.json`:
-   - **Marker tồn tại + `pid` alive (`kill -0 <pid>` success)** → skip arm, log *"inbox watcher already running pid=<X>"*.
-   - **Marker absent HOẶC pid dead** → arm daemon mới (step 3).
-3. Arm daemon:
+   - **Marker tồn tại + `bash_shell_id` còn alive trong session hiện tại** (verify qua `BashOutput`) → skip arm.
+   - **Marker absent HOẶC shell dead** → arm shell mới (step 3).
+3. Load Monitor tool: `ToolSearch` với `query: "select:Monitor"`.
+4. Start Bash background shell watcher:
    ```bash
-   nohup bash <plugin>/assets/discord-inbox-watcher.sh "$(pwd)" \
-     > .jira-bug/discord-inbox-watcher.log 2>&1 &
-   disown $!
+   Bash tool với:
+     command: 'cd "$PROJECT_DIR" && touch .jira-bug/.inbox-cursor && while true; do find .jira-bug/discord-inbox -maxdepth 1 -type f -name "*.json" -newer .jira-bug/.inbox-cursor -print 2>/dev/null; touch .jira-bug/.inbox-cursor; sleep 2; done'
+     run_in_background: true
+     timeout: unlimited
    ```
-   Lấy `<plugin>` qua `${CLAUDE_PLUGIN_ROOT}` (env Claude Code set khi load skill) HOẶC fallback `~/.claude/plugins/marketplaces/apero-tools/plugins/jira-bug-analyzer/skills/jira-bug-analyzer`.
-4. Ghi marker atomic:
+   Lưu `bash_shell_id` returned.
+5. Arm Monitor tool subscribe shell đó:
+   ```
+   Monitor với:
+     shell_id: <bash_shell_id>
+     emit: mỗi stdout line = 1 notification (= 1 file path của inbox mới)
+   ```
+6. Ghi marker:
    ```json
-   { "pid": <spawn_pid>, "armed_at": "<ISO>", "project": "<cwd>" }
+   { "bash_shell_id": "<id>", "armed_at": "<ISO>", "project": "<cwd>" }
    ```
-5. Announce 1 dòng: *"Discord inbox watcher armed — pid=<X>, log=.jira-bug/discord-inbox-watcher.log"*.
-6. **Catchup:** daemon đọc hết file trong `.jira-bug/discord-inbox/*.json` ở startup — các reply tới trong lúc daemon chết sẽ được xử lý ngay (không mất).
+7. Announce 1 dòng: *"Discord inbox watcher armed in-session — shell=<id>, lifecycle=session (die khi Ctrl+C)"*.
 
-**Daemon behavior:**
-- Backend: `fswatch -0` nếu có (zero-latency), poll loop 2s nếu không (`fswatch` thiếu).
-- Per new file: parse ticket từ tên file (`<KEY>-<msgid>.json`) → dedup check `active-resumes.json` → spawn `nohup claude -p "/jira-bug-analyzer <KEY> --resume-from-defer --auto" > logs &` → ghi vào `active-resumes.json` → move file sang `processed/`.
-- Latency file → spawn: < 3s (fswatch) hoặc < 5s (poll).
-- Log daemon activity vào `.jira-bug/discord-inbox-watcher.log` (startup, spawns, errors) để debug sau.
+**Lifecycle:**
+- Shell chạy trong session's background → session live = shell live.
+- User Ctrl+C `--manager` → session end → shell + Monitor chết → không có process ngầm nào tiếp tục.
+- Session re-arm sau khi restart `--manager`.
 
-**Cron fallback vẫn giữ** (Job G full-scan ở mỗi `/loop` tick) để pick up file sót trong trường hợp daemon crash giữa 2 lần restart `--manager`.
+**Khi file inbox mới xuất hiện (<5s):**
+- Watcher shell print path lên stdout.
+- Monitor tool nhận stdout line → session wake từ idle.
+- Session đọc file inbox → classify intent → **Job G xử lý INLINE trong terminal**:
+  - Post Jira comment audit `[VN]`
+  - Transition status (nếu plan-pick/close/review)
+  - Create worktree + chạy Phase 3-6 (fix + verify + PR) — user watches live
+  - Phase 6 inline Discord resolve post
+  - Move file sang `processed/`
+- **KHÔNG spawn `claude -p` nền.** Fix chạy trong chính session `--manager`.
+- Concurrency: 1 ticket 1 time (sequential). Reply thứ 2 trong lúc đang fix → file ở lại inbox, Monitor emit nhưng session đang bận → xử lý sau khi xong ticket hiện tại.
 
-**Stop daemon:**
-```bash
-kill $(python3 -c "import json; print(json.load(open('.jira-bug/discord-inbox-watch.json'))['pid'])")
-rm .jira-bug/discord-inbox-watch.json
-```
+**Cron fallback vẫn giữ** (Job G full-scan ở mỗi `/loop` tick) — safety net cho file sót nếu Monitor miss (crash, race).
+
+**Breaking v1.12.0 từ v1.11.x:** `claude -p` nền KHÔNG CÒN. Fix chạy inline trong `--manager`. Trade-off: visibility + no-background vs sequential throughput.
 
 `JIRA_BUG_DISCORD_DEFER` chưa set → skip arm (im lặng).
 
@@ -256,19 +270,24 @@ Consumer side của flow INBOUND inbox-write (producer = claudecode-discord bot,
 
 **Ambiguous → default `clarify`** (an toàn — re-analyze với context mới, không auto-fix mù).
 
-### Act per intent
+### Act per intent — INLINE in `--manager` terminal (v1.12.0+)
 - **plan-pick / resume-fix / clarify (có đủ info để fix):**
-  - **Push-mode default** (`JIRA_BUG_DISCORD_PUSH != 0`, default ON — giữ speed theo lựa chọn của user ở v1.10):
-    1. Post Jira comment `[VN]` audit trail: *"Nhận chỉ đạo qua Discord từ `{author_name}`: `{content_stripped}`. Spawn fix session."*
-    2. Write clarify-file `.jira-bug/clarify-<KEY>.md` chứa `{content_stripped}` + intent + plan-pick nếu có.
-    3. Dedup check `.jira-bug/active-resumes.json` — ticket đã có pid alive → skip spawn + ack trong `job_g_outcome: skipped-dedup`.
-    4. Concurrency cap check (default MAX=3, env `JIRA_BUG_DISCORD_PUSH_MAX`) — vượt → skip spawn + fallback qua Job E tick kế + `job_g_outcome: skipped-cap`.
-    5. Spawn: `nohup claude -p "/jira-bug-analyzer <KEY> --resume-from-defer --auto" > .jira-bug/resume-logs/<KEY>-<ts>.log 2>&1 &` + record `{pid, spawned_at, log}` vào `active-resumes.json`.
-    6. Post Discord confirmation vào `defer_channel_id` (reply vào `message_id` gốc nếu có): *"🚀 Đã spawn fix session cho {KEY} (pid {X}, ETA 5-30 min). Log: {LOG_PATH}"*.
-    7. `job_g_outcome: spawned`.
-  - **Legacy mode** (`JIRA_BUG_DISCORD_PUSH=0`): chỉ post Jira comment, không spawn. Job E tick kế pick up. `job_g_outcome: inline-resumed`.
-- **review:** post Jira comment `[VN]` + chuyển ticket → `Reviewing`, xoá ledger row defer, Job E Review branch takeover. Discord confirmation: *"👀 Đã chuyển {KEY} sang Reviewing."* `job_g_outcome: review-queued`.
+  1. Post Jira comment `[VN]` audit trail: *"Nhận chỉ đạo qua Discord từ `{author_name}`: `{content_stripped}`. Bắt đầu resume ngay."*
+  2. Write clarify-file `.jira-bug/clarify-<KEY>.md` chứa `{content_stripped}` + intent + plan-pick nếu có.
+  3. **Chạy Phase 3-6 INLINE trong session hiện tại** (không spawn `claude -p`):
+     - Phase 3 analyze với context từ clarify-file (hoặc skip nếu đã có analysis.md + chỉ đạo = plan-pick đơn giản)
+     - Phase 4 fix (worktree + edit code + build)
+     - Phase 5 verify (nếu có device)
+     - Phase 6 commit + PR + Jira transition
+     - **Phase 6 inline Discord post ✅ Resolved** (vì resume này đã xử lý xong, không cần Job F)
+  4. User watches toàn bộ Phase 3-6 live trong `--manager` terminal.
+  5. Sau Phase 6: `job_g_outcome: resumed`.
+- **review:** post Jira comment `[VN]` + chuyển ticket → `Reviewing`, xoá ledger row defer, Job E Review branch takeover ở tick kế. Discord confirmation: *"👀 Đã chuyển {KEY} sang Reviewing."* `job_g_outcome: review-queued`.
 - **close:** transition → `Won't Fix` (hoặc status đóng gần nhất) + comment lý do + xoá ledger row. Discord: *"🚫 Đã close {KEY}: {lý do}."* `job_g_outcome: closed`.
+
+**Concurrency (v1.12.0):** session xử lý 1 ticket 1 time. Nếu file inbox thứ 2 arrive giữa chừng → Monitor emit nhưng session đang bận Phase 4 → session xử lý sau khi xong ticket hiện tại. File ở lại inbox cho tới khi session quay lại scan (hoặc cron fallback).
+
+**No spawn `claude -p` nào.** Mọi fix chạy inline, user watches live, Ctrl+C `--manager` dừng mọi thứ.
 
 ### Move file sau xử lý
 - Append field `processed_at: <ISO>` + `job_g_outcome: <outcome>` + `job_g_message: <action summary>` vào JSON.
