@@ -21,6 +21,7 @@
 | **Jira ticket reopened** (Job D) | `phase-manager-mode.md` Job D | *"🔄 **{KEY}** bị reopen trên Jira. Reporter: `<user>`. Reason: `<text>` (nếu có)."* |
 | **New Jira comment arrived** (Job E) | `phase-manager-mode.md` Job E | *"📝 **{KEY}** có comment mới trên Jira từ `<author>`. Agent đang xử lý..."* |
 | **Deferred lại** (mid-fix wrong-plan) | `auto-plan-pick.md` | *"⏸️ **{KEY}** defer lại — lý do: `<reason>`. Chi tiết đã post trên Jira."* |
+| **No-op resolve** (pre-existing fix found) | Phase 6 / Job A | *"<@{qa_user_id}> ✅ **{KEY}** đã ship từ `<YYYY-MM-DD>` — commit `<short_sha>` ("`<commit title>`", tác giả: `<author>`, merged `<base>`). Mời QA retest trên build mới nhất. Nếu vẫn tái → reply ở đây hoặc reopen ticket kèm build#."* |
 
 ## Điều kiện bật
 
@@ -29,6 +30,22 @@
 - Env `LEARN_APP_DISCORD_BOT_TOKEN` set.
 
 Thiếu bất kỳ cái gì → skip silently + log *"discord-ticket-status: skipped (<reason>) for <KEY>"*, KHÔNG fail flow chính.
+
+## Mention format (BẮT BUỘC)
+
+Mọi mention Discord **CHỈ** dùng cú pháp **user mention `<@USER_ID>`** với `USER_ID` numeric lookup từ `assets/discord-roles.json → roles[po|dev|qa]`.
+
+**CẤM tuyệt đối cú pháp role mention `<@&ID>`** — file `discord-roles.json` chỉ chứa **user IDs**, KHÔNG có role IDs. Dùng `<@&user_id>` → Discord render ra **`@unknown-role`** (bug UX). Nếu không cần ping ai cụ thể → BỎ mention line, KHÔNG bịa `@qa` / `<@&qa>` plain text.
+
+Khi template bảng trên ghi `<@{qa_user_id}>` / `<@{dev_user_id}>` / `<@{po_user_id}>` → lookup `roles.qa` / `roles.dev` / `roles.po` từ `discord-roles.json` và paste nguyên numeric ID, giữ cú pháp `<@...>` (không `&`).
+
+Grep guard trong bash curl helper:
+```bash
+if echo "$CONTENT" | grep -q '<@&'; then
+  echo "ABORT: role-mention syntax <@&...> is forbidden — use <@USER_ID> only" >&2
+  exit 1
+fi
+```
 
 ## Build message
 

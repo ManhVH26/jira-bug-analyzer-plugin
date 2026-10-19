@@ -14,6 +14,25 @@ Ngay SAU khi `auto-plan-pick.md` "Khi defer" bước 2 (Jira comment đã post +
 
 **Thiếu bất cứ cái gì** → skip silently + log 1 dòng warning vào report (`discord-defer: skipped (config/token/flag missing)`), không fail defer.
 
+## Mention format (BẮT BUỘC)
+
+Mọi mention Discord **CHỈ** dùng cú pháp **user mention `<@USER_ID>`** với `USER_ID` numeric lookup từ `assets/discord-roles.json → roles[po|dev|qa]`.
+
+**CẤM tuyệt đối cú pháp role mention `<@&ID>`** — file `discord-roles.json` chỉ chứa **user IDs** (xem `_doc`), KHÔNG có role IDs. Dùng `<@&user_id>` → Discord không tìm thấy role với numeric ID đó trong guild → render ra **`@unknown-role`** (bug UX: dev không biết ping ai, không click được). Sai 1 lần = user confusion dài.
+
+Checklist trước khi curl POST:
+- [ ] Mention có đúng `<@` + 17-19 digit numeric + `>` (không có `&`)?
+- [ ] USER_ID lấy từ `roles[<picked_role>]`, không hard-code / không bịa?
+- [ ] Nếu không cần ping → BỎ mention line hẳn, KHÔNG thay bằng `@qa` / `@dev` / `<@&qa>` plain text.
+
+Grep guard (optional but recommended trong bash script):
+```bash
+if echo "$CONTENT" | grep -q '<@&'; then
+  echo "ABORT: role-mention syntax <@&...> is forbidden — use <@USER_ID> only" >&2
+  exit 1
+fi
+```
+
 ## LLM pick role
 
 Dựa context bug (summary + Fix-6 root cause + ticket labels), LLM chọn 1 trong 3:
