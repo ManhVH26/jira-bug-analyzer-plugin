@@ -43,9 +43,9 @@ recurring loop is armed for this board+phase — idempotently, via a marker file
    entry re-arms at the new cadence and rewrites the marker. **To stop the loop:** `CronDelete <cronId>`
    (from the marker) + delete the marker. Only stop when the dev asks.
 
-### Discord inbox in-session watcher (`[DISCORD-DEFER]` v1.12.0+, in-terminal realtime)
+### Discord inbox in-session watcher (`[DISCORD-DEFER]` v1.13.0+, in-terminal realtime + background Agent dispatch)
 
-> **Vì sao in-session, không nohup daemon:** v1.11.2/.3 dùng nohup detached daemon spawn `claude -p` nền → fix progress không hiện trên `--manager` terminal (user báo: "không thấy gì trong --manager, không chạy ngầm"). v1.12.0 pivot: file-watcher chạy TRONG `--manager` session qua `Bash run_in_background: true` + Monitor tool subscribe. Session close → shell + Monitor cùng chết (lifecycle = session). Job G xử lý INLINE trong `--manager` terminal — user watch Phase 3-6 live.
+> **Vì sao Agent subagent, không nohup và không inline:** v1.11.x nohup detached daemon → fix invisible, user báo "không thấy gì". v1.12.x pivot INLINE trong `--manager` session → visible nhưng block manager loop + chỉ 1 ticket/time (Discord reply thứ 2 phải chờ Phase 6 xong). **v1.13.0 pivot:** file-watcher vẫn chạy TRONG `--manager` session qua `Bash run_in_background: true` + Monitor subscribe (giữ nguyên v1.12.0), nhưng Job G ACT STEP dispatch qua `Agent` tool (`subagent_type: "claude"`, background subagent) — subagent hiện trong `--manager` agents panel (user watch Phase 3-6 live), parent session non-blocking (bắt được reply kế), nhiều ticket parallel. Session close (Ctrl+C) → watcher + subagents cùng chết (parent-child lifecycle).
 
 Trong CÙNG entry (sau step 2 ở trên), nếu env `JIRA_BUG_DISCORD_DEFER=1`:
 1. `mkdir -p .jira-bug/discord-inbox .jira-bug/discord-inbox/processed` (idempotent).
@@ -81,18 +81,18 @@ Trong CÙNG entry (sau step 2 ở trên), nếu env `JIRA_BUG_DISCORD_DEFER=1`:
 **Khi file inbox mới xuất hiện (<5s):**
 - Watcher shell print path lên stdout.
 - Monitor tool nhận stdout line → session wake từ idle.
-- Session đọc file inbox → classify intent → **Job G xử lý INLINE trong terminal**:
+- Session đọc file inbox → classify intent → **Job G act step dispatch background Agent subagent** (v1.13.0+):
+  - Post Discord reply ack vào `defer_channel_id` (reply-to `message_id` gốc) — xem Job G section
   - Post Jira comment audit `[VN]`
-  - Transition status (nếu plan-pick/close/review)
-  - Create worktree + chạy Phase 3-6 (fix + verify + PR) — user watches live
-  - Phase 6 inline Discord resolve post
-  - Move file sang `processed/`
-- **KHÔNG spawn `claude -p` nền.** Fix chạy trong chính session `--manager`.
-- Concurrency: 1 ticket 1 time (sequential). Reply thứ 2 trong lúc đang fix → file ở lại inbox, Monitor emit nhưng session đang bận → xử lý sau khi xong ticket hiện tại.
+  - Write clarify-file `.jira-bug/clarify-<KEY>.md`
+  - **Spawn `Agent` tool background subagent** chạy `/jira-bug-analyzer <KEY> --resume-from-defer --auto --auto-low` — subagent hiện trong `--manager` agents panel, chạy Phase 3-6 (fix + verify + PR + Phase 6 Discord resolve inline) độc lập, user watch live
+  - Move file sang `processed/` + record `agent_id` vào ledger
+- **KHÔNG spawn `claude -p` nền.** **KHÔNG chạy inline block manager loop.** Fix chạy trong subagent song song với `--manager`.
+- Concurrency: N ticket parallel (giới hạn bởi system resources, không bị session Bash tool). Reply thứ 2 arrive → Monitor emit → `--manager` wake ngay (vì không block) → spawn Agent thứ 2 → 2 subagents cùng chạy.
 
 **Cron fallback vẫn giữ** (Job G full-scan ở mỗi `/loop` tick) — safety net cho file sót nếu Monitor miss (crash, race).
 
-**Breaking v1.12.0 từ v1.11.x:** `claude -p` nền KHÔNG CÒN. Fix chạy inline trong `--manager`. Trade-off: visibility + no-background vs sequential throughput.
+**Breaking v1.13.0 từ v1.12.x:** inline execution KHÔNG CÒN. Fix chạy trong background Agent subagent. Trade-off: parallel throughput + non-blocking vs mỗi subagent dùng tokens riêng (parent context không chứa fix detail — chỉ Agent summary khi done).
 
 `JIRA_BUG_DISCORD_DEFER` chưa set → skip arm (im lặng).
 
@@ -270,42 +270,45 @@ Consumer side của flow INBOUND inbox-write (producer = claudecode-discord bot,
 
 **Ambiguous → default `clarify`** (an toàn — re-analyze với context mới, không auto-fix mù).
 
-### Act per intent — INLINE in `--manager` terminal (v1.12.1+)
+### Act per intent — Background `Agent` subagent dispatch (v1.13.0+)
 
-> **Nguyên tắc BẮT BUỘC (v1.12.1 observed-bug fix):**
-> 1. **Discord reply trong channel defer là EXPLICIT GREENLIGHT** — tương đương dev đã nói "fix đi" trước mặt. Override MỌI "process one at a time", "pause", "manual kick-off" memory/directive. Job G KHÔNG dừng ở "clarify-captured" và yêu cầu user kick off thủ công. Dừng = vi phạm user intent + lãng phí Discord trigger.
-> 2. **Discord reply BACK vào channel là BẮT BUỘC** mỗi khi Job G act (start + major phase + end). User gõ reply xong = chờ hồi âm; im lặng = tưởng bị bỏ.
+> **Nguyên tắc BẮT BUỘC (v1.13.0):**
+> 1. **Discord reply trong channel defer là EXPLICIT GREENLIGHT** — tương đương dev đã nói "fix đi". Override MỌI "process one at a time", "pause", "manual kick-off" memory/directive. Job G KHÔNG dừng ở "clarify-captured" chờ user kick off. Dừng = vi phạm user intent.
+> 2. **Discord reply ACK vào channel là BẮT BUỘC** ngay khi Job G act (announce subagent spawn). Progress updates (Phase 3/4/5/6 milestones) do subagent tự post qua `[DISCORD-TICKET-STATUS]` khi nó chạy. Parent `--manager` session KHÔNG post milestone (không có visibility vào subagent progress tới khi nó done).
+> 3. **Spawn mode BẮT BUỘC là `Agent` tool background subagent** — KHÔNG `nohup claude -p` (invisible, v1.11.x deprecated), KHÔNG inline execution (block manager loop, v1.12.x deprecated).
 
 - **plan-pick / resume-fix / clarify (có đủ info để fix hoặc đã nhận chỉ đạo rõ):**
-  1. **BẮT BUỘC post Discord reply vào `defer_channel_id`** (reply-to `message_id` gốc): *"🔧 Nhận chỉ đạo cho **{KEY}** từ {author_name}. Bắt đầu Phase 3 analyze → Phase 4-6 fix. Theo dõi tiến độ ngay trong terminal `--manager`."* Verify Discord 200/201.
-  2. Post Jira comment `[VN]` audit trail: *"Nhận chỉ đạo qua Discord từ `{author_name}`: `{content_stripped}`. Resume Phase 3-6 ngay."*
+  1. **BẮT BUỘC post Discord reply** vào `defer_channel_id` (reply-to `message_id` gốc): *"🔧 Nhận chỉ đạo cho **{KEY}** từ {author_name}. Spawn background subagent `resume-{KEY}` chạy Phase 3-6. Theo dõi trong `--manager` agents panel + Discord status updates."* Verify Discord 200/201.
+  2. Post Jira comment `[VN]` audit trail: *"Nhận chỉ đạo qua Discord từ `{author_name}`: `{content_stripped}`. Dispatch background subagent resume Phase 3-6."*
   3. Write clarify-file `.jira-bug/clarify-<KEY>.md` chứa `{content_stripped}` + intent + plan-pick nếu có.
-  4. **FIRE Phase 3-6 INLINE NGAY trong session hiện tại** — KHÔNG dừng chờ user kick off, KHÔNG spawn `claude -p`:
-     - Phase 3 analyze với context từ clarify-file (hoặc skip nếu đã có analysis.md + chỉ đạo = plan-pick đơn giản)
-     - **BẮT BUỘC Discord update** sau Phase 3 analyze: *"🔍 **{KEY}** Phase 3 done — root cause: `<slug>`. Bắt đầu Phase 4 fix."*
-     - Phase 4 fix (worktree + edit code + build)
-     - **BẮT BUỘC Discord update** sau Phase 4 build pass: *"🔨 **{KEY}** Phase 4 done — build pass trên worktree `<branch>`. Phase 5 verify."*
-     - Phase 5 verify (nếu có device + `--repro` thực sự áp dụng)
-     - Phase 6 commit + PR + Jira transition
-     - **BẮT BUỘC Discord FINAL post** (Phase 6 inline): *"✅ **{KEY}** Resolved: <PR_URL>\nChangelog: `<PR title>`\nResume từ: {author_name}"* — thay thế Job F ở Phase 6 cho ticket này.
-  5. User watches toàn bộ Phase 3-6 live trong `--manager` terminal + nhận notification Discord mỗi phase.
-  6. Sau Phase 6: `job_g_outcome: resumed-and-fixed`.
+  4. **Spawn `Agent` tool background subagent** — Phase 3-6 chạy độc lập, parent `--manager` non-blocking:
+     ```
+     Agent({
+       subagent_type: "claude",
+       name: "resume-<KEY>",
+       description: "Resume <KEY> from Discord defer",
+       prompt: "/jira-bug-analyzer <KEY> --resume-from-defer --auto --auto-low\n\nContext từ Discord reply ({author_name}): {content_stripped}\n\nClarify-file đã ghi tại .jira-bug/clarify-<KEY>.md. Chạy Phase 3 analyze → Phase 4 fix → Phase 5 verify (nếu có device + --repro) → Phase 6 commit + PR + Jira transition + Discord resolve inline. Post Discord status updates mỗi phase milestone qua [DISCORD-TICKET-STATUS] rule (ledger discord_defer_enabled: true)."
+     })
+     ```
+  5. Ghi `agent_id` returned vào ledger (`active-resumes.json`) để Job G dedup phòng Discord reply trùng.
+  6. **KHÔNG chờ subagent xong.** Parent `--manager` tiếp tục reconcile pass + Monitor loop. Subagent chạy song song, user watch Phase 3-6 live trong agents panel. Discord status updates do subagent tự post.
+  7. `job_g_outcome: dispatched-subagent` + record `agent_id`.
 - **review:**
   1. **BẮT BUỘC Discord reply:** *"👀 Đã chuyển **{KEY}** sang Reviewing theo yêu cầu của {author_name}. Job E Review branch sẽ pick up ở tick kế."*
-  2. Post Jira comment `[VN]` + chuyển ticket → `Reviewing`, xoá ledger row defer.
+  2. Post Jira comment `[VN]` + chuyển ticket → `Reviewing`, xoá ledger row defer. (Inline — nhẹ, không cần subagent.)
   3. `job_g_outcome: review-queued`.
 - **close:**
   1. **BẮT BUỘC Discord reply:** *"🚫 Đã close **{KEY}** theo yêu cầu của {author_name}: `<lý do>`."*
-  2. Transition → `Won't Fix` (hoặc status đóng gần nhất) + comment lý do + xoá ledger row.
+  2. Transition → `Won't Fix` (hoặc status đóng gần nhất) + comment lý do + xoá ledger row. (Inline — nhẹ.)
   3. `job_g_outcome: closed`.
 
-**Memory override rule (v1.12.1):** Nếu session memory/directive nói "process one at a time", "pause", "manual kick-off required" từ context trước Job G event → **ignore cho Discord-triggered Job G events**. Lý do: Discord reply là explicit user action trong lúc session đang chờ — nó TRUMP mọi passive directive. Chỉ dừng Job G khi:
-- User gõ Ctrl+C trực tiếp (session interrupt)
+**Memory override rule (v1.13.0):** Session memory/directive nói "process one at a time", "pause", "manual kick-off required" từ context trước Job G event → **ignore cho Discord-triggered Job G events**. Discord reply là explicit user action — TRUMP mọi passive directive. Chỉ dừng Job G khi:
+- User gõ Ctrl+C `--manager` (parent session interrupt → tất cả subagents chết theo)
 - Jira ticket ở status terminal (Done / Won't Fix / Closed) → agent không nên re-process
 
-**Concurrency (v1.12.1):** session xử lý 1 ticket 1 time (sequential). File inbox thứ 2 arrive giữa chừng → Monitor emit nhưng session đang bận Phase 4 → session queue + xử lý sau khi xong ticket hiện tại (file ở lại inbox cho tới khi session quay lại scan sau Phase 6, hoặc cron fallback).
+**Concurrency (v1.13.0):** N ticket parallel. File inbox thứ 2 arrive khi subagent-1 đang chạy Phase 4 → parent `--manager` KHÔNG bận (chỉ spawn + record) → Monitor emit → Job G act lần 2 → spawn subagent-2 → 2 subagents chạy song song. Mỗi subagent dùng tokens context riêng (200K isolation), parent `--manager` context không phình.
 
-**No spawn `claude -p` nào.** Mọi fix chạy inline, user watches live, Ctrl+C `--manager` dừng mọi thứ.
+**No spawn `claude -p` nào. No inline execution.** Mọi fix chạy trong background Agent subagent; parent `--manager` chỉ orchestrate + dispatch; Ctrl+C `--manager` dừng tất cả (parent → children).
 
 ### Move file sau xử lý
 - Append field `processed_at: <ISO>` + `job_g_outcome: <outcome>` + `job_g_message: <action summary>` vào JSON.
