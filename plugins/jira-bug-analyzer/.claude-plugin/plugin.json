@@ -1,7 +1,7 @@
 {
   "name": "jira-bug-analyzer",
   "displayName": "Jira Bug Analyzer",
-  "version": "1.14.1",
+  "version": "1.15.0",
   "description": "Harness-loop agent that fetches Jira bug tickets via MCP, analyzes attached images/videos (human-mcp eyes_analyze; Claude-native fallback), scores each bug against a confidence rubric, verifies on-device via adb, opens PRs, and learns into a shared GitHub memory. Modes: single, multi, manager (--manager), team (--team).",
   "author": {
     "name": "hung-apero",
