@@ -1,4 +1,4 @@
-# Manager mode — Discord-related jobs (Job E, F, G + inbox watcher)
+# Manager mode — Discord-related jobs (Job E, F, G, H + inbox watcher)
 
 > **Loaded on demand by `references/phase-manager-mode.md`** only when env `JIRA_BUG_DISCORD_DEFER=1` or the ledger has rows needing Discord-side handling. Core manager (Jobs A/B/C/D, self-arm, reconcile orchestration, returns summary) stays in `phase-manager-mode.md` — this file is pure Discord mechanics.
 
@@ -269,3 +269,30 @@ Act (inline, không spawn subagent):
 
 ### `[SHEET]`
 Job G vẫn chạy (Discord-driven, không phụ thuộc Jira/Sheet source). ticket-resume + bulk-op cần Jira transition → n/a với Sheet (thay bằng update sheet row + Discord confirmation). Query + chat + meta-cmd unaffected.
+
+## Job H — User-override completion ack (v1.15.2+)
+
+> **Scope:** CLOSES THE LOOP khi parent session thực thi 1 inbox task **ngoài Job G classifier flow** — ví dụ user ask-reply chọn A/B rồi em thực thi inline bỏ qua classifier, hoặc override 1 message đã route `out-of-scope`. Trước v1.15.2 không có path nào post ack về Discord cho các case này → message gốc không có reply, user tưởng im lìm.
+
+### Trigger
+Parent session hoàn thành bất kỳ task nào bắt nguồn từ 1 inbox file CHƯA có `processed_at` (chưa qua Job G). Áp cho:
+- User-override Discord inbox task bỏ qua Job G routing (ví dụ out-of-scope task user vẫn muốn chạy).
+- Task triggered từ Discord inbox nhưng parent session chọn execute inline thay vì dispatch subagent.
+- Bất cứ công việc nào mà một inbox file được coi là nguồn ask, kể cả khi task thuộc skill khác.
+
+### Protocol
+1. **Trước khi move file → `processed/`**: parent session POST Discord reply ack vào `message_id` gốc (reply via REST với `message_reference`).
+2. Nội dung reply:
+   - ✅ hoặc ⚠️ icon.
+   - 1–2 câu tóm tắt kết quả (deliverables, links như Firebase Console / PR URL / Jira key).
+   - Nếu task theo spec là `out-of-scope` nhưng user override → add note *"Note: msg này theo spec plugin là `out-of-scope` (<reason>). Executed under user-override."*
+3. Verify POST 200/201 → capture `msg_id` → add field `user_override_ack_msg_id: <id>` vào file JSON.
+4. Append fields `processed_at: <ISO>`, `job_g_outcome: user-override-<slug>`, `job_g_message: <action summary>` → `mv processed/<same-name>.json`.
+5. POST fail (401/404/5xx) → KHÔNG move file (để tick kế retry) + log; parent session surface warning cuối turn.
+
+### Idempotency
+- `user_override_ack_msg_id` present trong file đã processed → Job G scan skip (đã ack).
+- Nếu parent session crash sau POST trước mv → file vẫn ở inbox, nhưng tick kế của Job G sẽ phát hiện `user_override_ack_msg_id` + treat như processed → bump `processed_at` và move. Không double-post.
+
+### `[SHEET]`
+Job H chạy nguyên vẹn — Discord ack không phụ thuộc Jira/Sheet source.

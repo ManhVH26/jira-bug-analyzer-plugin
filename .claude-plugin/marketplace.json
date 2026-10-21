@@ -10,7 +10,7 @@
       "name": "jira-bug-analyzer",
       "source": "./plugins/jira-bug-analyzer",
       "description": "Harness-loop agent that fetches Jira bug tickets via MCP, analyzes attached images/videos, scores against a confidence rubric, verifies on-device via adb, opens PRs, and learns into a shared GitHub memory. Modes: single, multi, manager, team.",
-      "version": "1.15.1",
+      "version": "1.15.2",
       "author": {
         "name": "hung-apero",
         "email": "huypq.dev@gmail.com"
@@ -30,7 +30,7 @@
         "source": "github",
         "repo": "hung-apero/learn-app-plugin"
       },
-      "description": "Trợ lý cho PO lắp app Learn từ Feature Store: đọc spec + Figma, lắp feature theo chuẩn kho, test end-to-end có video qua 3 cổng duyệt, kiểm tra theo yêu cầu Google Play.",
+      "description": "Tr\u1ee3 l\u00fd cho PO l\u1eafp app Learn t\u1eeb Feature Store: \u0111\u1ecdc spec + Figma, l\u1eafp feature theo chu\u1ea9n kho, test end-to-end c\u00f3 video qua 3 c\u1ed5ng duy\u1ec7t, ki\u1ec3m tra theo y\u00eau c\u1ea7u Google Play.",
       "version": "0.37.0",
       "author": {
         "name": "hung-apero",

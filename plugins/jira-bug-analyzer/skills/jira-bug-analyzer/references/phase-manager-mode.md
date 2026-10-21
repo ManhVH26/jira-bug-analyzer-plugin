@@ -69,10 +69,11 @@ makes KB-backfill reliable independent of watch-file state.
 
 **Then: `auto-fixed`-label scan → Job D** — a read-only `jira_search` for `labels = auto-fixed` (this board/phase) whose ledger `auto_eval` is still `pending` or may have changed → **Job D** (reopen-outcome tracking). Independent of watch-file/Done state.
 
-**Then: Jobs E / F / G — DEFERRED load.** All three are Discord-related and ledger-driven:
+**Then: Jobs E / F / G / H — DEFERRED load.** All four are Discord-related and ledger-driven:
 - **Job E** (deferred-ticket comment watcher) — load if the ledger has `analyzed-deferred` rows for this project+phase.
 - **Job F** (Discord resolve post) — load if env `LEARN_APP_DISCORD_BOT_TOKEN` is set.
 - **Job G** (Discord inbox multipurpose dispatcher) — load if folder `.jira-bug/discord-inbox/` exists AND env `JIRA_BUG_DISCORD_DEFER=1`.
+- **Job H** (user-override completion ack, v1.15.2+) — ALWAYS checked when env `LEARN_APP_DISCORD_BOT_TOKEN` is set: scan `.jira-bug/discord-inbox/*.json` for files WITHOUT `processed_at` that correspond to work parent session already finished this run → POST reply ack to `message_id` → mark + move to `processed/`. Closes the gap for inbox tasks executed outside Job G flow (user ask-reply override, inline execution of `out-of-scope` tasks, etc.).
 
 **Full specs for all three live in `references/helpers/manager-discord-jobs.md`** — load that one file when ANY condition above fires; skip entirely if none do (saves ~5K tokens on a plain Jobs-A-through-D tick).
 
@@ -155,6 +156,7 @@ Print a concise summary and end the pass (do NOT `CronDelete` the manager loop �
 - 💬 **Deferred resumed (Job E):** `<K comment xử lý>` — `<X resumed> · <Y review-requested> · <Z clarify-posted>` + per-ticket key.
 - ✅ **Discord resolve posts (Job F, `[DISCORD-DEFER]`):** `<N tickets posted>` + per-ticket key → PR link. Skip nếu env unset.
 - 📥 **Discord Job G (`[DISCORD-MULTIPURPOSE]` v1.14.0+):** `<N files xử lý>` — `<ticket-resume> · <bulk-op> · <query> · <chat> · <meta-cmd> · <low-conf-clarify>`. ⏳ Pending confirms: `<open>` open, `<expired>` expired-this-pass. 💬 Thread cache: `<hits>/<fetches>`. Skip nếu folder không có hoặc env unset.
+- ✉️ **Discord Job H (user-override ack, v1.15.2+):** `<N files acked>` — per-file `<message_id> → <ack msg_id>`. Skip nếu env unset hoặc không có file override.
 - ⚠️ Anything surfaced (un-pushed memory, unreadable PR, arming failure).
 
 Errors → `references/helpers/troubleshooting.md`. Invariants: `[REST]` (Jira reads/replies),
