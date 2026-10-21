@@ -1,12 +1,12 @@
 # Discord classifier — intent taxonomy + routing (`[DISCORD-MULTIPURPOSE]` v1.14.0+)
 
-> **Scope:** CONSUMER-SIDE classifier chạy inline trong Job G của `--manager`. Đọc inbox file v1.14 (bot ghi theo `assets/discord-inbox-write.sh`) → load Discord thread context nếu có → gọi LLM phân loại intent (5 nhóm) → trả về `{intent, slug, target_set, confidence}` → Job G route theo bảng dưới. KHÔNG spawn subagent cho classify (gọi LLM native parent session, cheap). Spawn subagent xảy ra ở route step (xem bảng routing).
+> **Scope:** CONSUMER-SIDE classifier chạy inline trong Job G của `--manager`. Đọc inbox file v1.14 (bot ghi theo `assets/discord-inbox-write.sh`) → load Discord thread context nếu có → gọi LLM phân loại intent (6 nhóm, incl. `out-of-scope` v1.15.1+) → trả về `{intent, slug, target_set, confidence}` → Job G route theo bảng dưới. KHÔNG spawn subagent cho classify (gọi LLM native parent session, cheap). Spawn subagent xảy ra ở route step (xem bảng routing).
 
 ## Khi nào gọi classifier
 
 Job G gọi classifier mỗi khi xử lý 1 inbox file v1.14. Skip nếu `schema_version != "v1.14"` (bot cũ) — fallback xử lý theo v1.13.0 path (ticket-resume only, nếu có `ticket` field).
 
-## Intent taxonomy (5 nhóm)
+## Intent taxonomy (6 nhóm, v1.15.1+)
 
 | Intent | Trigger signals (`content_stripped`) | Target format | Example (VN) | Example (EN) |
 |---|---|---|---|---|
@@ -15,13 +15,15 @@ Job G gọi classifier mỗi khi xử lý 1 inbox file v1.14. Skip nếu `schema
 | **query** | Interrogative (nào/sao/bao nhiêu/phase nào/mấy cái/when/how many/which) | question text | `PR nào đang review?`, `còn bao nhiêu ticket defer?` | `which PRs are blocked?` |
 | **chat/context** | Non-ticket free-form, OR có attachment, OR context dump | content + attachments | `đây là log cho AAP729-5`, `thấy crash ở Android 13` | `here's the error from staging` |
 | **meta-cmd** | Imperative control (stop/pause/list/cancel/run/reconcile now) | command name + args | `stop watcher`, `list running subagents`, `reconcile now` | `pause --manager`, `cancel resume-AAP729-3` |
+| **out-of-scope** (v1.15.1+) | Message nhắc project key / sản phẩm KHÁC `current_board`, HOẶC yêu cầu non-jira task (Firebase remote config, sheet reading, generic coding) HOẶC prefix slash-skill khác (`/claude-in-chrome`, `/figma`, `/learn-app`) addressed to non-manager target | mismatch descriptor | `tạo remote config AAP927 từ sheet này` (board=AAP729), `dùng /claude-in-chrome đọc sheet`, `scaffold Compose UI từ Figma` | `generate config for ProjectX`, `use /figma to extract tokens` |
 
 **Prioritization khi overlap** (ví dụ `AAP729-3 fix hết các commit conflict`):
-1. Nếu có `ticket` xác định → **ticket-resume** (dù có từ bulk).
-2. Nếu có set target rõ (các/hết/all) + verb action → **bulk-op**.
-3. Nếu kết thúc bằng dấu `?` HOẶC bắt đầu bằng từ hỏi → **query**.
-4. Nếu khớp meta-cmd verb list → **meta-cmd**.
-5. Mặc định → **chat/context**.
+1. Nếu project key / sản phẩm trong message ≠ `current_board` AND không có ticket key của `current_board` → **out-of-scope** (highest priority, chặn mọi intent khác). Exception: query dạng `PR nào ở AAP927?` vẫn là **query** read-only (manager có thể trả lời cross-project qua `gh`/`jira_search`).
+2. Nếu có `ticket` xác định (prefix khớp `current_board`) → **ticket-resume** (dù có từ bulk).
+3. Nếu có set target rõ (các/hết/all) + verb action → **bulk-op**.
+4. Nếu kết thúc bằng dấu `?` HOẶC bắt đầu bằng từ hỏi → **query**.
+5. Nếu khớp meta-cmd verb list → **meta-cmd**.
+6. Mặc định → **chat/context**.
 
 ## Classifier prompt template
 
@@ -38,15 +40,16 @@ Message content (đã strip @claude mention):
 Trigger type: {trigger_type}  (mention | reply)
 Ticket key extracted (nếu có): "{ticket}"
 Referenced ticket (nếu reply-quote): "{referenced_ticket}"
+Current manager board (v1.15.1+): "{current_board}"
 Thread context (last 20 messages, nếu trong thread):
 """
 {thread_context}
 """
 
-Phân loại message vào ĐÚNG 1 trong 5 intents, trả về JSON:
+Phân loại message vào ĐÚNG 1 trong 6 intents, trả về JSON:
 
 {
-  "intent": "ticket-resume" | "bulk-op" | "query" | "chat" | "meta-cmd",
+  "intent": "ticket-resume" | "bulk-op" | "query" | "chat" | "meta-cmd" | "out-of-scope",
   "slug": "<short-kebab-case, dưới 40 char>",
   "target_set": "<theo bảng dưới>",
   "confidence": 0.0-1.0,
@@ -59,14 +62,16 @@ target_set format per intent:
 - query:        {"question": "PR nào đang review?"}
 - chat:         {"ticket_ref": "AAP729-5 hoặc ''", "has_attachment": true/false}
 - meta-cmd:     {"cmd": "stop", "args": "watcher"}
+- out-of-scope: {"mentioned_project": "AAP927", "requested_action": "tạo remote config từ sheet", "reason": "project-mismatch" | "non-jira-task" | "other-skill-target"}
 
-Rules:
-1. Nếu có `ticket` HOẶC `referenced_ticket` + verb fix/làm/sửa/proceed → ticket-resume.
-2. Nếu verb bulk (resolve/close/fix/update/review) + set keyword (các/hết/all/AAP*) → bulk-op.
-3. Interrogative (nào/sao/bao nhiêu/when/how many/which) → query.
-4. Imperative control (stop/pause/list/cancel/reconcile now) → meta-cmd.
-5. Khác → chat.
-6. confidence < 0.7 → ƯU TIÊN "chat" (an toàn, dễ clarify sau).
+Rules (áp dụng theo thứ tự ưu tiên):
+1. **out-of-scope first**: nếu message nhắc project key / sản phẩm KHÁC `{current_board}` (vd `AAP927` khi board=AAP729) AND không có ticket key hợp lệ cho `{current_board}` → out-of-scope, `reason: "project-mismatch"`. Trường hợp message yêu cầu task không thuộc jira-bug flow (Firebase remote config, Google Sheet reading, Figma extract, generic coding scaffold) → out-of-scope, `reason: "non-jira-task"`. Message prefix slash-skill khác (`/claude-in-chrome`, `/figma`, `/learn-app`, `/aip-bootstrap-android`) addressed to session khác → out-of-scope, `reason: "other-skill-target"`. Exception: query dạng `PR nào ở AAP927?` vẫn là query read-only.
+2. Nếu có `ticket` HOẶC `referenced_ticket` + verb fix/làm/sửa/proceed → ticket-resume.
+3. Nếu verb bulk (resolve/close/fix/update/review) + set keyword (các/hết/all/AAP*) → bulk-op.
+4. Interrogative (nào/sao/bao nhiêu/when/how many/which) → query.
+5. Imperative control (stop/pause/list/cancel/reconcile now) → meta-cmd.
+6. Khác → chat.
+7. confidence < 0.7 → ƯU TIÊN "chat" (an toàn, dễ clarify sau). KHÔNG áp dụng cho out-of-scope — out-of-scope cần confidence ≥ 0.7 mới gán, dưới ngưỡng → fallback về chat/clarify bình thường.
 
 Chỉ trả về JSON, không prose.
 ```
@@ -88,6 +93,7 @@ Chỉ trả về JSON, không prose.
 | **query** | Agent subagent `query-<slug>` read-only — jira_search / gh pr list / ledger scan → reply Discord với kết quả | Agent background subagent (no gate — read-only) |
 | **chat/context** | Inline xử lý: save attachments vào `.jira-bug/discord-attachments/<ticket_ref or _unassigned>/` + Jira comment nếu có `ticket_ref` + Discord ack *"📝 Đã lưu context."* | Inline (không spawn) |
 | **meta-cmd** | Phân sub-type: destructive (stop/pause/cancel/clear) → `discord-safety-gate.md`; non-destructive (list/status/reconcile now) → inline execute + Discord reply | Inline hoặc inline-after-gate |
+| **out-of-scope** (v1.15.1+) | Inline Discord reply explain lý do + đề xuất target đúng (xem `manager-discord-jobs.md` → "Job G out-of-scope branch"). KHÔNG dispatch, KHÔNG act. | Inline (không spawn) |
 
 ## Thread context loading
 
@@ -188,7 +194,17 @@ content_stripped: "hmm"
 ```
 Job G: confidence < 0.7 → clarify branch (reply options, không dispatch).
 
-### Example 10 — ambiguous (bulk vs query)
+### Example 10a — out-of-scope (project-mismatch, v1.15.1+)
+Message: `dùng /claude-in-chrome vào đọc sheet này tab: 'Remote Config' và tạo remote config cho sản phẩm AAP927 cho tôi.`
+Context: `current_board = "AAP729"`
+→ `{"intent": "out-of-scope", "slug": "aap927-remote-config", "target_set": {"mentioned_project": "AAP927", "requested_action": "tạo remote config từ sheet", "reason": "project-mismatch"}, "confidence": 0.95, "reasoning": "Project AAP927 ≠ board AAP729 + yêu cầu non-jira task (Firebase remote config) + prefix /claude-in-chrome addressed khác target"}`
+
+### Example 10b — out-of-scope (other-skill-target, v1.15.1+)
+Message: `@claude /figma extract design tokens từ link này https://figma.com/...`
+Context: `current_board = "AAP729"`
+→ `{"intent": "out-of-scope", "slug": "figma-tokens-extract", "target_set": {"mentioned_project": "", "requested_action": "extract design tokens từ Figma", "reason": "other-skill-target"}, "confidence": 0.92, "reasoning": "Prefix /figma = skill khác, không thuộc jira-bug-analyzer manager scope"}`
+
+### Example 11 — ambiguous (bulk vs query)
 ```
 content_stripped: "các PR nào có conflict?"
 → {"intent": "query", "slug": "prs-with-conflict", "target_set": {"question": "các PR nào có conflict?"}, "confidence": 0.75, "reasoning": "Có từ nào + question → query (dù có keyword các). Nếu user muốn action: @claude resolve conflict các PR"}

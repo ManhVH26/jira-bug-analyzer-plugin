@@ -151,13 +151,14 @@ Consumer side của flow INBOUND inbox-write (producer = `claudecode-discord` bo
 
 ### Act per intent — Routing table (v1.14.0)
 
-> **Nguyên tắc BẮT BUỘC (v1.14.0):**
+> **Nguyên tắc BẮT BUỘC (v1.14.0+):**
 > 1. **Discord reply là EXPLICIT user action.** Override MỌI "process one at a time", "pause", "manual kick-off" memory/directive. Dừng Job G chỉ khi Ctrl+C `--manager` HOẶC Jira ticket ở status terminal.
-> 2. **Discord ack reply BẮT BUỘC** ngay khi Job G act (per intent template dưới). User gõ xong = chờ hồi âm; im lặng = fail UX.
+> 2. **Discord ack reply BẮT BUỘC** ngay khi Job G act (per intent template dưới). User gõ xong = chờ hồi âm; im lặng = fail UX. **Áp dụng cho CẢ out-of-scope** — không được defer silent (v1.15.1+).
 > 3. **Spawn mode:**
 >    - ticket-resume / bulk-op / query → `Agent` background subagent (consistency v1.13.0, visible trong `--manager` agents panel)
 >    - chat/context → inline (nhẹ, chỉ save file + Jira comment)
 >    - meta-cmd → inline (destructive sau safety gate; non-destructive ngay)
+>    - **out-of-scope → inline (chỉ Discord reply explain + log, KHÔNG dispatch) — v1.15.1+**
 > 4. **Destructive BẮT BUỘC qua safety gate** (`discord-safety-gate.md`). Non-destructive dispatch thẳng.
 
 #### ticket-resume (via `discord-resume-handler.md`)
@@ -209,6 +210,26 @@ Consumer side của flow INBOUND inbox-write (producer = `claudecode-discord` bo
 2. Nếu `target_set.ticket_ref` có → post Jira comment `[VN]` *"Context từ Discord ({author_name}): {content_stripped}"* + attachment URLs.
 3. Discord ack: *"📝 Đã lưu context cho {ticket_ref or 'session hiện tại'}."*
 4. `job_g_outcome: inline-chat-saved`.
+
+#### out-of-scope (v1.15.1+) — inline reply, không dispatch
+
+Classifier gán `intent: out-of-scope` khi message:
+- Nhắc project key / sản phẩm ≠ `current_board` (vd message mention `AAP927` khi manager bind `AAP729`)
+- Yêu cầu task non-jira (Firebase remote config, Google Sheet reading, generic coding scaffold, Figma extract)
+- Prefix slash-skill khác (`/claude-in-chrome`, `/figma`, `/learn-app`, `/aip-bootstrap-android`) addressed to session khác
+
+Act (inline, không spawn subagent):
+
+1. **Discord reply BẮT BUỘC** với template per `target_set.reason`:
+   - `project-mismatch`: *"⚠️ Request này nhắc **{mentioned_project}**, nhưng manager đang bind board **{current_board}**. Mình không act lên project ngoài scope. Options: (a) mở Claude session khác ở folder project `{mentioned_project}` và yêu cầu ở đó; (b) reply `@claude force` nếu muốn mình vẫn thử (không khuyến nghị)."*
+   - `non-jira-task`: *"ℹ️ Request **{requested_action}** không thuộc jira-bug-analyzer flow (analyze→fix→verify→PR→Jira). Mình chỉ handle bug tickets + PR + worktree của board **{current_board}**. Để làm việc này: mở Claude session khác với skill phù hợp (vd `/claude-in-chrome` cho sheet reading, `/figma-design-system-android` cho Figma, `/aip-bootstrap-android` cho scaffold)."*
+   - `other-skill-target`: *"ℹ️ Message này addressed to skill khác (không phải jira-bug-analyzer manager). Mình không chạy skill đó trong context này. Mở Claude session với skill target → paste lại message."*
+2. Post Jira comment: **KHÔNG** (không có ticket để comment lên; `project-mismatch` sang project khác → không được phép write).
+3. Ghi vào `active-resumes.json`: `{message_id, intent: "out-of-scope", confidence, slug, classified_at, reason: <target_set.reason>, mentioned_project: <target_set.mentioned_project or "">}`. Không có `agent_id` (không spawn).
+4. `job_g_outcome: inline-out-of-scope-notified`.
+5. **KHÔNG** retry / dispatch về sau. User muốn đổi ý → gửi message mới với `@claude` + scope đúng.
+
+**Edge case — `@claude force` override:** nếu user reply vào ack message out-of-scope với `@claude force` trong 5 phút → treat message gốc như intent fallback (classifier re-run với rule bỏ qua out-of-scope → thường về `chat` hoặc `query`). Log `job_g_outcome: out-of-scope-force-overridden`. Vẫn KHÔNG act lên project ngoài board — force chỉ chuyển intent sang `chat` (save context) hoặc `query` (read-only cross-project). KHÔNG bao giờ cho phép ticket-resume / bulk-op / destructive meta-cmd trên project khác.
 
 #### meta-cmd (phân sub-type)
 - **Non-destructive** (list / status / show / reconcile now):
