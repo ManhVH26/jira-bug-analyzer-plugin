@@ -66,7 +66,7 @@ In team mode the device side of the gate is **owned by Tester** and run **once p
 
 ### Team-mode deviations from solo `/jira-bug-analyzer` (CRITICAL — every Dev obeys)
 
-1. **Devs are code-only.** Run claim → analyze → plan → fix → **build the APK** (`assembleAppDevDebug`), then **STOP at the verify gate** and hand to the Lead/Tester. A Dev NEVER runs the Phase 5 adb self-verify (`adb`, NOT mobile-mcp), NEVER acquires the device lock, NEVER `adb install`.
+1. **Devs are code-only.** Run claim → analyze → plan → fix → **build the APK** (`<BUILD_CMD>`), then **STOP at the verify gate** and hand to the Lead/Tester. A Dev NEVER runs the Phase 5 adb self-verify (`adb`, NOT mobile-mcp), NEVER acquires the device lock, NEVER `adb install`.
 2. **Devs do NOT arm the PR-watcher cron.** Github Observer owns watching. (Solo Phase 6 watcher-cron step is skipped in team mode.)
 3. **Dispatch is central.** Devs do NOT self-pull the board; the lead pulls + claims + assigns. A Dev only works the ticket handed to it.
 4. **Approval goes to the lead, not the human directly** — Dev sends the plan/diff to the lead, who applies the approval policy above.
@@ -102,7 +102,7 @@ Every `/jira-bug-analyzer` step maps to ONE owning role. The **Dev owns a contig
 | Fix-7 clarify | **Dev** drafts | per ticket | ambiguity → Lead / human |
 | **Fix-8 approval** | **Lead** | per plan | auto low-risk · escalate med/high |
 | Fix-9 non-code VN comment | **Dev** posts | per ticket | ticket disposition → Lead |
-| Fix-10 worktree · Fix-11 fix by the plan · Fix-12 **build APK** (`assembleAppDevDebug`) + **commit (1/ticket)** | **Dev** | per ticket | Dev → Lead: ready (joins PR round) |
+| Fix-10 worktree · Fix-11 fix by the plan · Fix-12 **build APK** (`<BUILD_CMD>`) + **commit (1/ticket)** | **Dev** | per ticket | Dev → Lead: ready (joins PR round) |
 | **PR round window (5m, rolling)** — collect `ready` tickets, cut round at cutoff | **Lead** | per round | → assemble round branch |
 | Phase 5 — assemble round branch + **build ONCE** (combined commits) | **Lead** (+ Dev worktrees) | per round | → Tester for device |
 | Phase 5 Gate 1 — **review the combined round diff on the GitHub webview** (FIRST) | **Lead** | per round | `No change` → build · `Needs change` → Dev (Phase 4 impl) / Phase 3 (plan) |

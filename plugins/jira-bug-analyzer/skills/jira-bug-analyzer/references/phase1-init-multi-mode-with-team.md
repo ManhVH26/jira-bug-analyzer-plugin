@@ -37,7 +37,7 @@ Then continue Init-6 (model) → Init-8 (substrate + launch) → Init-9 (context
 **Memory & manifest / First-run persist / Init-5 resume / Just-in-time re-probes** — identical to `references/phase1-init-multi-mode-without-team.md` (the lead is a multi worker that also orchestrates). In team mode, **Init-5 resume is owned per `team/team.md`**: the lead reconciles batch/board state; Observer re-attaches PR watchers. The full PR-watch reconcile (review-comment fixing) + KB-backfill is run via **`--manager`** (`references/phase-manager-mode.md`) after the team's batch, same as solo mode.
 
 ### Init-6 — Model
-Per-stage matrix is the same as the other modes (analyzer→opus, fixer→sonnet, fetch/mechanical→haiku, memory-keeper judgment→opus); `--model <…>` overrides all stages. **Agent-Teams constraint (substrate A): all teammates run Opus** regardless of the matrix — the matrix's cheaper-stage choices apply only on the Agent-tool fallback (substrate B) where per-Agent model is free to set.
+Per-stage matrix = the **Model matrix** in `references/constants.md` (same as the other modes); `--model <…>` overrides the judgment stages only. **Agent-Teams constraint (substrate A): all teammates run Opus** regardless of the matrix — the matrix's cheaper-stage choices apply only on the Agent-tool fallback (substrate B) where per-Agent model is free to set.
 
 ### Init-8 — Substrate detection + become MainCharacter
 The skill needs *a* multi-agent substrate, **NOT specifically `TeamCreate`**. Hard-block only if NEITHER exists:
@@ -57,6 +57,6 @@ The skill needs *a* multi-agent substrate, **NOT specifically `TeamCreate`**. Ha
 ### Init-9 — Context (lead's pull)
 The lead needs **board → status → assignee** (same intake + auto-select rules as `references/phase1-init-multi-mode-without-team.md` → Init-9), plus **`N` (Dev count)** sized from the board (`--devs N` or ask, default 2), plus **spec/figma/other** — the mandatory spec/figma *ask* up front, then captured in full in the background at the source-of-truth capture (Phase 2) for the whole phase (serves all tickets, not the picked set; the digest is non-blocking). Teammates do NOT self-pull — the lead pulls, claims, and dispatches.
 
-> **`--devs N`** sets the Dev count; **`--pr-window <N>m`** sets the rolling PR-round window (default `5m`). `--every` is removed (multi re-pulls automatically each turn) — warn + ignore if passed.
+> **`--devs N`** sets the Dev count; **`--pr-window <N>m`** sets the rolling PR-round window (default `TEAM_PR_ROUND`, `references/constants.md`) — team mode only; solo modes stream per ticket and ignore it. `--every` is removed (multi re-pulls automatically each turn) — warn + ignore if passed.
 
 When the substrate is up and the team spawned → drive the run from `team/team.md` (Role Cards + Step→Role matrix + Running loop).

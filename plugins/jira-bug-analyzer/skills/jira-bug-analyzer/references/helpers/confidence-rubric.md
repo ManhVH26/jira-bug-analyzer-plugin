@@ -13,13 +13,13 @@ Either way, on-device verify + PR always run — the rubric never skips review.
 | Single unambiguous root cause | 40 | one clear cause with concrete code evidence (`file:line`); NOT 2–3 competing hypotheses |
 | Small change | 30 | ≤ ~20 LOC AND ≤ 2 files AND no public-API / DB-migration / DI-graph change |
 | KB hit | 20 | a matching app-agnostic `knowledgebase/<category>/<slug>.md` with a proven fix exists |
-| Deterministic repro | 10 | **reproduced on-device** at Fix-5.5 (`bug-analysis-rules.md` A4) or via a candidate case (A9); not flaky/once-seen. **Not reproduced (A10) → 0** (and under `--auto` with `[REPRO_ON]=true` that routes to defer). Interactive `not device-verified` (A7b) → score conservatively (partial/0). **`[REPRO_ON]=false` (default — no `--repro` flag / NL intent, A7c): expected 0 by design**, `reason: no-repro-flag` — not a failure, the raised auto threshold (≥ 90) compensates. |
+| Deterministic repro | 10 | **reproduced on-device** at Fix-5.5 (`bug-analysis-rules.md` A4) or via a candidate case (A9); not flaky/once-seen. **Not reproduced (A10) → 0** (and under `--auto` with `[REPRO_ON]=true` that routes to defer). Interactive `not device-verified` (A7b) → score conservatively (partial/0). **`[REPRO_ON]=false` (default — no `--repro` flag / NL intent, A7c): expected 0 by design**, `reason: no-repro-flag` — not a failure, the raised auto threshold (`AUTO_THRESHOLD_DEFAULT`) compensates. |
 
 **Auto-approve threshold (`--auto` only):**
-- `[REPRO_ON]=true` (user opted in via `--repro` or NL intent) → **≥ 80** (today's rule).
-- `[REPRO_ON]=false` (default-skip, device-repro not required) → **≥ 90** — stricter bar compensates for the missing `deterministic_repro` points.
+- `[REPRO_ON]=true` (user opted in via `--repro` or NL intent) → **`AUTO_THRESHOLD_REPRO`** (`references/constants.md`).
+- `[REPRO_ON]=false` (default-skip, device-repro not required) → **`AUTO_THRESHOLD_DEFAULT`** (`references/constants.md`) — stricter bar compensates for the missing `deterministic_repro` points.
 
-> **`[AUTO]` note:** scoring happens the same way in EVERY mode — but the score only **routes the gate under `--auto`** (`references/helpers/auto-plan-pick.md`): `≥ 80` → fix unattended, `< 80` → **defer + report**. **In interactive mode the score is informational** — it is shown in the plan, but the dev ALWAYS approves the plan before any code (Fix-8). There is no interactive "≥80 → skip the ask" path.
+> **`[AUTO]` note:** scoring happens the same way in EVERY mode — but the score only **routes the gate under `--auto`** (`references/helpers/auto-plan-pick.md`): sum ≥ the run's threshold (`references/constants.md`) → fix unattended, below it → **defer + report**. **In interactive mode the score is informational** — it is shown in the plan, but the dev ALWAYS approves the plan before any code (Fix-8). There is no interactive "high score → skip the ask" path.
 
 ## Scorecard the analyzer returns
 ```json
@@ -43,4 +43,4 @@ Either way, on-device verify + PR always run — the rubric never skips review.
 - **KB feedback:** a `kb_hit` fix that verifies `pass` bumps the matched KB entry's `confidence` (memory-keeper).
 
 ## Tuning
-Edit the weights/threshold here; the change ships with the skill version. Raise the threshold or KB-hit weight if `--auto` auto-fixes start landing wrong; lower it to auto-fix more aggressively under `--auto` once the KB matures. (Interactive mode is unaffected — it always asks.) **The 80/90 split by `[REPRO_ON]` is intentional** — flipping default-skip back to default-on means both numbers collapse to 80 again; keep them aligned with the `[REPRO]` default in SKILL.md.
+Edit the weights/thresholds in `references/constants.md` (`RUBRIC_WEIGHTS`, `AUTO_THRESHOLD_*`); the change ships with the skill version. Check the effect with `scripts/reopen_report.py` (reopen rate of `auto-fixed` tickets vs the project's non-auto bugs) before and after. Raise the threshold or KB-hit weight if `--auto` auto-fixes start landing wrong; lower it to auto-fix more aggressively under `--auto` once the KB matures. (Interactive mode is unaffected — it always asks.) **The `AUTO_THRESHOLD_REPRO` / `AUTO_THRESHOLD_DEFAULT` split by `[REPRO_ON]` is intentional** — flipping default-skip back to default-on means both collapse to `AUTO_THRESHOLD_REPRO` again; keep them aligned with the `[REPRO]` default in SKILL.md.

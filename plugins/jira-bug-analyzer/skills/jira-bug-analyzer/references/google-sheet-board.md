@@ -71,7 +71,7 @@ No Jira transition/assignee. **Claim = write/upsert the ledger row `status: anal
 - The Fix-6 block's `Title:` becomes `**Bug:** AIP304-SHEET-<N°> — <summary>` (no Jira link — there is none); `Resource link` Image/Video lines carry the sheet's attachment URLs (short-display markdown). Everything else in the Fix-6 format is unchanged.
 
 ## Fix / Verify (Phases 4–5) — identical
-Worktree off `origin/<BASE>` at `phaseX/fixbug/<KEY>`, `assembleAppDevDebug`, GitHub diff-review gate, APK install + user-verify, `--auto` adb self-verify + saved evidence. No changes.
+Worktree off `origin/<BASE>` at `phaseX/fixbug/<KEY>`, `<BUILD_CMD>`, GitHub diff-review gate, APK install + user-verify, `--auto` adb self-verify + saved evidence. No changes.
 
 ## Commit & PR (Phase 6 delta — ledger-only finalize, NO Jira, NO sheet write)
 - `[1COMMIT]` + `gh pr create` are **unchanged** (PR title/body English; body carries the Phase-3 + Phase-5 facts per bug; the per-bug heading is the sheet key).

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# lint: no-strict-mode — sourced library; its probes must never abort the caller (contract: read-only, always exits 0).
 # Shared init core for the jira-bug-analyzer skill.
 #
 # This file is a LIBRARY — it is sourced, not run directly. The three per-mode
@@ -57,7 +58,7 @@ PY
 #     freshness from the user-scope probe cache (~/.claude/jira-bug-analyzer/probe-cache.json),
 #     and the analyzer config's lastSyncAt (memory-pull freshness). SETS the caller's locals
 #     directly via bash dynamic scope (no command-substitution, no eval):
-#       BOARD  JQL  BASEBRANCH(value|'')  ENVCACHE(ok|'')  MCPCACHE(ok|'')  MEMFRESH(1|'')
+#       BOARD  JQL  BASEBRANCH(value|'')  BUILDCMD/APKGLOB/AUTOSCOPE(value|'')  ENVCACHE(ok|'')  MCPCACHE(ok|'')  MEMFRESH(1|'')
 #     This replaces the former single ~190ms python3 fork. On Windows/git-bash process creation is
 #     THE cost (a fork ~60-75ms), so the rule is zero subprocesses: `while read` + parameter
 #     expansion + integer arithmetic are all shell builtins -> the read is effectively free.
@@ -77,7 +78,7 @@ PY
 jb_state() { # jb_state <setup-file> <probe-cache-file> <env-ttl> <now-epoch> <config-file> <mem-ttl>
   local setup="$1" envc="$2" ttl="$3" now="$4" cfg="$5" memttl="$6" line v
   BOARD="-"; JQL=""; BASEBRANCH=""; ENVCACHE=""; MCPCACHE=""; MEMFRESH=""; MEMREPO_SET=""
-  TYPE=""; SHEETCSV=""; SHEETROWS=""
+  TYPE=""; SHEETCSV=""; SHEETROWS=""; BUILDCMD=""; APKGLOB=""; AUTOSCOPE=""
   if [ -f "$setup" ]; then
     while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
@@ -87,6 +88,15 @@ jb_state() { # jb_state <setup-file> <probe-cache-file> <env-ttl> <now-epoch> <c
         *'"baseBranch"'*:*)
           v=${line#*:}; v=${v#*\"}; v=${v%%\"*}
           [ -n "$v" ] && BASEBRANCH="$v" ;;
+        *'"buildCmd"'*:*)
+          v=${line#*:}; v=${v#*\"}; v=${v%%\"*}
+          [ -n "$v" ] && BUILDCMD="$v" ;;
+        *'"autoScope"'*:*)
+          v=${line#*:}; v=${v#*\"}; v=${v%%\"*}
+          [ -n "$v" ] && AUTOSCOPE="$v" ;;
+        *'"apkGlob"'*:*)
+          v=${line#*:}; v=${v#*\"}; v=${v%%\"*}
+          [ -n "$v" ] && APKGLOB="$v" ;;
         *'"type"'*:*)
           v=${line#*:}; v=${v#*\"}; v=${v%%\"*}
           [ -n "$v" ] && TYPE="$v" ;;
@@ -265,7 +275,7 @@ PY
   # --- board + jql (from EFF) + probe-cache (env+mcp) + memory TTL freshness, all via shell
   #     builtins (jb_state sets these locals directly — zero subprocess on the warm path) ---
   local BOARD="-" JQL="" BASEBRANCH="" ENVCACHE="" MCPCACHE="" MEMFRESH="" MEMREPO_SET=""
-  local TYPE="" SHEETCSV="" SHEETROWS=""
+  local TYPE="" SHEETCSV="" SHEETROWS="" BUILDCMD="" APKGLOB="" AUTOSCOPE=""
   jb_state "$EFF" "$ENVCACHE_FILE" "$ENV_TTL" "$NOW" "$CFG_FILE" "$MEM_TTL"
   BOARD="${BOARD:--}"
 
@@ -408,6 +418,10 @@ PY
   printf 'MEMORY_CLONE=%s\n'  "$MEMCLONE"
   printf 'BASEBRANCH=%s\n'    "${BASEBRANCH:-none}"
   [ -n "$BASEBRANCH_SUGGEST" ] && printf 'BASEBRANCH_SUGGEST=%s\n' "$BASEBRANCH_SUGGEST"
+  # Build command + APK location per project (setup.json buildCmd/apkGlob); defaults = references/constants.md.
+  printf 'BUILD_CMD=%s\n'     "${BUILDCMD:-./gradlew assembleAppDevDebug}"
+  printf 'APK_GLOB=%s\n'      "${APKGLOB:-app/build/outputs/apk/**/debug/*.apk}"
+  printf 'AUTO_SCOPE=%s\n'    "${AUTOSCOPE:-ui-only}"   # --auto fix scope (references/constants.md AUTO_SCOPE)
   printf 'SETUP_TYPE=%s\n'    "$SETUP_TYPE"
   if [ "$SETUP_TYPE" = "google-sheet" ]; then
     [ -n "$SHEET_ARG" ] && printf 'SHEET_URL=%s\n' "$SHEET_ARG"

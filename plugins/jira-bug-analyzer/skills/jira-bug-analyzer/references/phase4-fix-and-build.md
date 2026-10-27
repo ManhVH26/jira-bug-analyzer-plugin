@@ -1,6 +1,6 @@
 # Phase 4 — Fix workflow (worktree → fix by the plan → build app to verify compilation)
 
-> The flow's fourth phase: **Intake (phase1) → Source-of-truth capture (phase2, background) → Analyze (phase3) → Fix (THIS phase).** It starts from an **approved plan** (Phase 3 Fix-8), fixes by that plan in an isolated worktree, and **builds the app (`./gradlew assembleAppDevDebug`) to verify it compiles** — a green build is Phase 4's done gate. Verify-on-device / PR / Jira are NOT in this phase (Phase 5 + Phase 6). The **analyze** steps (claim → fetch → media → root-cause + plan → clarify → approval) live in `references/phase3-analyze.md`. The other named blocks (Post-analysis dedup · In-Progress lock · Pre-fix context · Fix worktree · Multi fan-out · Post-fix gates · PR round · PR watcher) live in `references/run-blocks.md` — keep it loaded. The **Pull & list by category** block lives in `references/phase1-init-multi-mode-without-team.md` (re-pulls reuse it). Invariants are SKILL.md Golden Rules (`[CLAIM]` `[VERIFY]` `[1COMMIT]` `[VN]` `[OPTIONS]` `[REST]`). SOT ground truth is resolved via the **Context-source rule** in `references/phase3-analyze.md` (memory if ready, else the dev's provided refs — never block on the background capture).
+> The flow's fourth phase: **Intake (phase1) → Source-of-truth capture (phase2, background) → Analyze (phase3) → Fix (THIS phase).** It starts from an **approved plan** (Phase 3 Fix-8), fixes by that plan in an isolated worktree, and **builds the app (`<BUILD_CMD>`) to verify it compiles** — a green build is Phase 4's done gate. Verify-on-device / PR / Jira are NOT in this phase (Phase 5 + Phase 6). The **analyze** steps (claim → fetch → media → root-cause + plan → clarify → approval) live in `references/phase3-analyze.md`. The other named blocks (Post-analysis dedup · In-Progress lock · Pre-fix context · Fix worktree · Multi fan-out · Post-fix gates · PR round · PR watcher) live in `references/run-blocks.md` — keep it loaded. The **Pull & list by category** block lives in `references/phase1-init-multi-mode-without-team.md` (re-pulls reuse it). Invariants are SKILL.md Golden Rules (`[CLAIM]` `[VERIFY]` `[1COMMIT]` `[VN]` `[OPTIONS]` `[REST]`). SOT ground truth is resolved via the **Context-source rule** in `references/phase3-analyze.md` (memory if ready, else the dev's provided refs — never block on the background capture).
 
 ## What Phase 4 needs to do (exactly)
 
@@ -8,7 +8,7 @@ Phase 4 takes an **approved plan** (from Phase 3) and turns it into a **green bu
 
 1. **Create the fix worktree** — isolated, **`git fetch origin` fresh first**, then branched off the **latest `origin/<BASE>`** (Fix-10) — the same ref Phase 3 analyzed; always newest, never a stale local ref.
 2. **Fix strictly by the approved plan** — implement the change; never deviate (Fix-11). Plan wrong mid-fix → STOP + re-confirm.
-3. **Build the app to verify compilation** — run `./gradlew assembleAppDevDebug` from the worktree (Fix-12).
+3. **Build the app to verify compilation** — run `<BUILD_CMD>` from the worktree (Fix-12). `<BUILD_CMD>` / `<APK_GLOB>` = the `BUILD_CMD=` / `APK_GLOB=` lines init printed (from `setup.json` `buildCmd` / `apkGlob`, else `DEFAULT_BUILD_CMD` / `DEFAULT_APK_GLOB` in `references/constants.md`). If the task does not exist in this project (`./gradlew tasks --all` has no match), ask the dev once `[OPTIONS]` for the right task and save it with `assets/setup-json.sh merge-set .jira-bug/setup.json buildCmd=<cmd>` (local + shared, like `baseBranch`).
 4. **Green build → Phase 4 is done** → hand the built fix to **Phase 5**. **Red build → back to step 2**, fix the error, re-build.
 
 **Exception (Fix-9):** if the plan's root cause is **not fixable in app code** (config/console, backend, env/device, works-as-designed, can't-reproduce) → do NOT branch/fix/build; post the `[VN]` non-code comment instead and stop.
@@ -42,7 +42,7 @@ After it lands: **no code, no PR, NOT transitioned to Resolved.** It was claimed
 
 **Fix-12 — Build the app to verify compilation, then hand off to Phase 5 (Verify).** Phase 4's done gate is a **green app build**, not just an editor/compiler check. After implementing the fix, run the `appDev`/`debug` assemble from the worktree to prove the app actually compiles **and** builds:
 ```bash
-./gradlew assembleAppDevDebug
+<BUILD_CMD>
 ```
 - **Build succeeds (APK produced)** → Phase 4 is **done**. The built APK + warm shared Gradle cache carry straight into Phase 5 (no rebuild — Phase 5's install reuses this APK). Hand the built fix in its worktree to **Phase 5** (`references/phase5-verify.md`): review the diff on GitHub → install this APK + user-verify (adb self-verify only on `--auto`).
 - **Build fails (compile/build error)** → back to Fix-11 to fix the error, then re-build. Never hand a red build to Phase 5.

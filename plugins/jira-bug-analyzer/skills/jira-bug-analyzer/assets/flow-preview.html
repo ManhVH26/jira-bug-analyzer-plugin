@@ -63,10 +63,10 @@ flowchart TD
   P2["<b>G2 · Nguồn chuẩn (SOT)</b><br/>BẮT BUỘC hỏi spec Confluence + Figma<br/>digest tổng hợp chạy NỀN, không chặn"]:::p2 --> P3
   P3["<b>G3 · Phân tích</b><br/>Vào: SOT · mô tả Jira · ảnh/video · KB · code<br/>fetch + đọc origin/BASE mới nhất (read-only)<br/>claim → nguyên nhân gốc → kế hoạch → chấm điểm<br/>chống trùng root_cause_slug"]:::p3 --> GATE{"Cổng duyệt"}
   GATE -->|"chế độ thường: LUÔN hỏi → Duyệt"| P4
-  GATE -->|"--auto, điểm ≥80"| P4
+  GATE -->|"--auto, điểm ≥90 (≥80 --repro)"| P4
   GATE -->|"--auto, điểm &lt;80"| DEFER["Hoãn + báo cáo"]:::stop
 
-  P4["<b>G4 · Sửa + build</b><br/>fetch mới → worktree từ origin/BASE mới nhất<br/>sửa đúng kế hoạch đã duyệt<br/>assembleAppDevDebug (cổng XANH)"]:::p4
+  P4["<b>G4 · Sửa + build</b><br/>fetch mới → worktree từ origin/BASE mới nhất<br/>sửa đúng kế hoạch đã duyệt<br/><BUILD_CMD> (cổng XANH)"]:::p4
   P4 -->|"build đỏ"| P4
   P4 -->|"Fix-9: không phải code"| CMT["Comment VN → dừng"]:::stop
   P4 -->|"build XANH (APK)"| P5
@@ -115,7 +115,7 @@ flowchart TD
   <div class="diagram">
     <pre class="mermaid">
 flowchart LR
-  A["pick<br/>tự chọn ticket"] --> B{"điểm ≥80?"}
+  A["pick<br/>tự chọn ticket"] --> B{"điểm ≥ ngưỡng?"}
   B -->|"có"| C["verify<br/>code-reviewer + adb<br/>(2× re-fix)"]
   B -->|"không"| D["hoãn + báo cáo"]:::stop
   C --> E["ship<br/>commit+PR nền · Discord TẮT (trừ --discord)<br/>PR mở KHÔNG merge"]

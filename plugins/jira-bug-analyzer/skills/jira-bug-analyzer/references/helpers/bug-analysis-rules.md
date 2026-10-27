@@ -48,7 +48,7 @@ The **`deterministic_repro`** criterion in `references/helpers/confidence-rubric
 - `[REPRO_ON]=true` + reproduced on-device (A4) or via a candidate case (A9) → **full points**.
 - `[REPRO_ON]=true` + not reproduced (A10) → **0** — which, with the other criteria, routes `--auto --repro` to defer.
 - `[REPRO_ON]=true` + interactive `not device-verified` (A7b) → score conservatively (partial/0); the dev always still approves at Fix-8.
-- `[REPRO_ON]=false` (A7c, default) → **always 0 by design**, `reason: no-repro-flag`. Not a failure. The `--auto` auto-approve threshold raises to **≥ 90** to compensate (`auto-plan-pick.md`).
+- `[REPRO_ON]=false` (A7c, default) → **always 0 by design**, `reason: no-repro-flag`. Not a failure. The `--auto` auto-approve threshold raises to **`AUTO_THRESHOLD_DEFAULT`** (`references/constants.md`) to compensate (`auto-plan-pick.md`).
 
 ## Analysis checklist (what "analyzed" means)
 A ticket is properly analyzed only when: **reality-checked** (A1–A3) · **either** reproduced on-device (A4–A6) or run through the ladder (A8–A9) or static+flagged (A7b) **when `[REPRO_ON]=true`**, **or** static-only + `not device-verified` (A7c) **when `[REPRO_ON]=false`, DEFAULT** · **or** deferred if unreproducible (A10, only reachable under `[REPRO_ON]=true`) · with **one evidence-backed, verifiable, scoped root cause** (A11–A14). Anything short of this is not ready for Fix-8.
