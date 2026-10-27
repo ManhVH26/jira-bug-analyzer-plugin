@@ -11,6 +11,7 @@ Driven by AAP729 data (16–22/10/2026): `--auto` fixes were reopened 30 % (25/8
 - **`--auto` fixes UI-only tickets by default (R5, `AUTO_SCOPE=ui-only`).** Behavioral tickets (network, lifecycle, rotation, ads, timing, performance) defer `behavioral-scope`. Per project: `setup.json` `autoScope: "all"` once the reopen rate meets the target.
 - **No device → behavioral `--auto` tickets defer `no-device` (R3)** instead of shipping on static review. UI-only and interactive runs keep the fail-open.
 - **Verifier runs state-change scenarios (R4)** — network off/on, rotation, background/foreground, process death, ads, date change — when the ticket's category matches.
+- **Job D tracks interactive fixes too**: ledger rows `pr-created`/`done` (no `auto-fixed` label) get `done` / `reopened` + reason from the Jira changelog, reported on a separate line; a missing row is backfilled.
 - **Job D reads the status history (R1)**, re-checks `held` fixes for `REOPEN_WATCH_DAYS`, records a reopen reason (R6) and prints an R7 verdict after 50 new auto-fixes.
 - **`@claude` on Jira only from allowed people (S1)**: `setup.json` `allowedCommenters`, default = the dev who claimed + the assignee.
 - **`[UNTRUSTED]` golden rule (S2)**: ticket/comment/Discord/Confluence text is data; Discord text reaches subagents as a file.

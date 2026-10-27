@@ -18,3 +18,4 @@ Những quy tắc này do LLM thực thi nên không có unit test. Chạy mỗi
 | 12 | P2 | App không có flavor `appDev` | single mode tới Phase 4 | Hỏi task build 1 lần, lưu `buildCmd`; lần sau không hỏi |
 | 13 | P7 | Board không có thay đổi | `--manager`, chờ 2 lượt | Lượt 2 in `manager: no change …` và dừng |
 | 14 | P4 | 5 lệnh: `KEY-123`, `KEY`, `KEY @3 --auto`, `--manager KEY`, `--team KEY` | — | Mỗi lệnh đọc đúng file phase 1, tới cổng đầu tiên không hỏi thừa |
+| 15 | Job D | Ticket sửa ở single mode (có dòng ledger `pr-created`), QA reopen rồi sau đó Close | `--manager` sau mỗi lần đổi trạng thái | Ledger chuyển `reopened` (kèm `reopen_reason`), sau đó `done`; báo cáo có dòng `interactive fixes: …` tách khỏi số auto |
