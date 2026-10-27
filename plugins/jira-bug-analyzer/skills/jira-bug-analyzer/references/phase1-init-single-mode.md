@@ -39,18 +39,7 @@ Then continue Init-6 (model) → Init-9 (context).
 **Just-in-time re-probes** (volatile **non-MCP** deps only — re-checked at their gate, never cached): `adb-device` + `gradle` before the verify gate; `gh-cli` auth before PR (Fix-13). Missing at the gate → targeted `AskUserQuestion` `[OPTIONS]` there. **MCP servers are NOT here** — all template MCPs (jira/confluence/figma/human-mcp) are provisioned **once at init** (required `MCP_SETUP` step); gates only re-confirm an MCP's **liveness**, never provision. Durable deps stay cached in the `env` block; `--recheck-env` forces a fresh probe.
 
 ### Init-6 — Model (per-stage policy — do NOT ask)
-Each stage runs on the model that fits its cost/difficulty. **Do not ask for a model up front** — apply this matrix automatically:
-
-| Stage | Model | Why |
-|---|---|---|
-| Get Jira ticket (fetch, attachments) | **haiku** | cheap I/O + listing |
-| Analyze + fix plan (root cause, scorecard, plan) — the analyzer | **opus** | hardest reasoning, deep root-cause |
-| Fix the bug (implement per approved plan) — the fixer | **sonnet** | solid code execution |
-| Categorize into a KB category + dedup match — memory-keeper's judgment work | **opus** | hardest judgment — wrong category pollutes KB, missed dedup wastes a fix |
-| Everything else (fetch, Jira writes, comments, worklog, PR finalize, plain status-file writes) | **haiku** | cheap mechanical steps |
-
-- **Spawn each subagent on its stage model** via the Agent tool's `model` param: analyzer → `opus`, fixer → `sonnet`, memory-keeper / fetch helpers → `haiku`.
-- **`--model <opus|sonnet|haiku>` overrides the whole matrix** — forces that one model for every stage (escape hatch). Persist it to setup memory; without it, the per-stage matrix applies (no model prompt).
+Apply the **Model matrix** in `references/constants.md` automatically — main loop `sonnet`, analyzer `opus`, fixer/verifier/code-reviewer `sonnet`, mechanical stages `haiku`; pass `model` on every `Agent` spawn. **Do not ask for a model up front.** `--model <…>` overrides only the judgment stages (same file).
 
 ### Init-9 — Context (single)
 Single mode needs the **ticket key** + optional design refs — no board/status/assignee, no pull. Anything supplied is ground truth, fed into the pre-fix context import (Fix-11) — no auto-discovery for those fields. Ask one at a time, wait for each, skip anything the args/earlier answers resolved:
