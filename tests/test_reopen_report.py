@@ -60,6 +60,24 @@ class ReopenReport(unittest.TestCase):
         self.assertTrue(0.05 < p < 0.1, p)
 
 
+class SelfFlip(unittest.TestCase):
+    def flip(self, who_back, back_at):
+        """Resolved at 13:55 by manhvh, flipped back to In Progress at `back_at` by `who_back`, resolved again."""
+        return issue("AIP396-473", [],
+                     dict(h("2026-10-27T13:55:00.000+0700", ("status", "In Progress", "Resolved")), author={"name": "manhvh"}),
+                     dict(h(f"2026-10-27T{back_at}:00.000+0700", ("status", "Resolved", "In Progress")), author={"name": who_back}),
+                     dict(h("2026-10-27T15:20:00.000+0700", ("status", "In Progress", "Resolved")), author={"name": "manhvh"}))
+
+    def test_fixer_flipping_back_within_minutes_is_not_a_reopen(self):
+        self.assertFalse(rr.classify([self.flip("manhvh", "13:56")], False)[0]["reopened"])
+
+    def test_someone_else_reopening_is_a_reopen(self):
+        self.assertTrue(rr.classify([self.flip("qa", "13:56")], False)[0]["reopened"])
+
+    def test_fixer_reopening_much_later_is_a_reopen(self):
+        self.assertTrue(rr.classify([self.flip("manhvh", "15:10")], False)[0]["reopened"])
+
+
 class ByDev(unittest.TestCase):
     def test_by_keeps_only_the_dev_who_added_the_label_even_after_reassign(self):
         mine = issue("A-5", ["auto-fixed"],

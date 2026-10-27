@@ -15,6 +15,7 @@ Every other file names the constant (e.g. `AUTO_THRESHOLD_DEFAULT`) and points h
 | `VERIFY_OBSERVE_RETRIES` | 5 | verifier observation retries before `blocked` |
 | `MANAGER_LOOP` | 10 min | `--manager` self-armed `/loop` cadence |
 | `REOPEN_WATCH_DAYS` | 14 | Job D keeps re-checking a `held` auto-fix for a reopen this long after it resolved |
+| `REOPEN_SELF_FLIP_MINUTES` | 30 | a done → open flip by the same person who just resolved it, within this window, is a workflow correction, not a reopen (Job D + `scripts/reopen_report.py`) |
 | `REOPEN_TARGET` | ≤ the project's non-auto reopen rate | Phase R success bar (`scripts/reopen_report.py` prints both) |
 | `DISCORD_INTENTS` | 6 | `discord/discord-classifier.md` taxonomy size |
 | `DISCORD_CONFIRM_TTL` | 60 s | `discord/discord-safety-gate.md` |

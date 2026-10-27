@@ -19,6 +19,10 @@ DONE = {"resolved", "closed", "done", "reviewing"}
 OPEN = {"reopened", "request", "in progress", "to do", "open"}
 DEFERRED_LABELS = {"analyzed-deferred", "qa-info-needed", "needs-po-clarification"}
 PAGE = 100
+# A done -> open flip by the SAME person who just resolved it, within this window, is a workflow
+# correction (e.g. Resolved -> In Progress -> Resolved while finalizing), not a QA reopen.
+# Keep in sync with REOPEN_SELF_FLIP_MINUTES in references/constants.md.
+REOPEN_SELF_FLIP_MINUTES = 30
 
 
 def parse_time(s):
@@ -60,15 +64,22 @@ def fix_time(issue, auto):
 
 
 def reopened_after(issue, t0):
-    """First done -> open transition strictly after t0, or None."""
+    """First real reopen (done -> open) strictly after t0, or None. A flip back by the person who
+    made the last done transition, within REOPEN_SELF_FLIP_MINUTES, is ignored."""
+    last_done = None  # (time, author) of the latest move INTO a done status
     for h in histories(issue):
-        when = parse_time(h["created"])
-        if when <= t0:
-            continue
+        when, who = parse_time(h["created"]), author(h)
         for it in h.get("items", []):
-            if it.get("field") == "status" and (it.get("fromString") or "").lower() in DONE \
-                    and (it.get("toString") or "").lower() in OPEN:
-                return when
+            if it.get("field") != "status":
+                continue
+            src, dst = (it.get("fromString") or "").lower(), (it.get("toString") or "").lower()
+            if dst in DONE:
+                last_done = (when, who)
+            elif src in DONE and dst in OPEN and when > t0:
+                self_flip = (last_done and who and who == last_done[1]
+                             and (when - last_done[0]).total_seconds() <= REOPEN_SELF_FLIP_MINUTES * 60)
+                if not self_flip:
+                    return when
     return None
 
 
