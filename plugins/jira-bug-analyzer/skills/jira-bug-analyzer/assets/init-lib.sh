@@ -420,6 +420,8 @@ PY
   [ -n "$BASEBRANCH_SUGGEST" ] && printf 'BASEBRANCH_SUGGEST=%s\n' "$BASEBRANCH_SUGGEST"
   # Build command + APK location per project (setup.json buildCmd/apkGlob); defaults = references/constants.md.
   printf 'BUILD_CMD=%s\n'     "${BUILDCMD:-./gradlew assembleAppDevDebug}"
+  # default = a guess that may not exist in this project -> Phase 4 runs build-task-check.sh before building.
+  printf 'BUILD_CMD_SOURCE=%s\n' "$([ -n "$BUILDCMD" ] && echo setup || echo default)"
   printf 'APK_GLOB=%s\n'      "${APKGLOB:-app/build/outputs/apk/**/debug/*.apk}"
   printf 'AUTO_SCOPE=%s\n'    "${AUTOSCOPE:-ui-only}"   # --auto fix scope (references/constants.md AUTO_SCOPE)
   printf 'SETUP_TYPE=%s\n'    "$SETUP_TYPE"

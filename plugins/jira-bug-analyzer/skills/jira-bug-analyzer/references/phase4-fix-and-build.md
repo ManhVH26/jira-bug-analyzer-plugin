@@ -4,6 +4,7 @@
 Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
 - [ ] `git fetch` then a worktree from `origin/<BASE>` — never edit the main checkout.
 - [ ] Change only what the approved plan says (`references/helpers/fix-code-rules.md` R1–R22).
+- [ ] `BUILD_CMD_SOURCE=default` → `bash <skill-dir>/assets/build-task-check.sh "<repo root>" "<BUILD_CMD>"` before the first build. `BUILD_TASK=missing` → ask the dev `[OPTIONS]` from `CANDIDATES=` and save `setup-json.sh merge-set .jira-bug/setup.json buildCmd=<cmd>` (local + shared). Silently swapping the task is a bug (AAP857-113).
 - [ ] `<BUILD_CMD>` green before Phase 5; quote the build result.
 - [ ] Next: **read `references/phase5-verify.md`** and follow its order — Gate 1 (show the diff to the dev) BEFORE any install on a device. Skipping the file skipped Gate 1 on AIP396-475.
 
@@ -15,7 +16,7 @@ Phase 4 takes an **approved plan** (from Phase 3) and turns it into a **green bu
 
 1. **Create the fix worktree** — isolated, **`git fetch origin` fresh first**, then branched off the **latest `origin/<BASE>`** (Fix-10) — the same ref Phase 3 analyzed; always newest, never a stale local ref.
 2. **Fix strictly by the approved plan** — implement the change; never deviate (Fix-11). Plan wrong mid-fix → STOP + re-confirm.
-3. **Build the app to verify compilation** — run `<BUILD_CMD>` from the worktree (Fix-12). `<BUILD_CMD>` / `<APK_GLOB>` = the `BUILD_CMD=` / `APK_GLOB=` lines init printed (from `setup.json` `buildCmd` / `apkGlob`, else `DEFAULT_BUILD_CMD` / `DEFAULT_APK_GLOB` in `references/constants.md`). If the task does not exist in this project (`./gradlew tasks --all` has no match), ask the dev once `[OPTIONS]` for the right task and save it with `assets/setup-json.sh merge-set .jira-bug/setup.json buildCmd=<cmd>` (local + shared, like `baseBranch`).
+3. **Build the app to verify compilation** — run `<BUILD_CMD>` from the worktree (Fix-12). `<BUILD_CMD>` / `<APK_GLOB>` = the `BUILD_CMD=` / `APK_GLOB=` lines init printed (from `setup.json` `buildCmd` / `apkGlob`, else `DEFAULT_BUILD_CMD` / `DEFAULT_APK_GLOB` in `references/constants.md`). If the task does not exist in this project (`assets/build-task-check.sh` prints `BUILD_TASK=missing`), ask the dev once `[OPTIONS]` for the right task and save it with `assets/setup-json.sh merge-set .jira-bug/setup.json buildCmd=<cmd>` (local + shared, like `baseBranch`).
 4. **Green build → Phase 4 is done** → hand the built fix to **Phase 5**. **Red build → back to step 2**, fix the error, re-build.
 
 **Exception (Fix-9):** if the plan's root cause is **not fixable in app code** (config/console, backend, env/device, works-as-designed, can't-reproduce) → do NOT branch/fix/build; post the `[VN]` non-code comment instead and stop.

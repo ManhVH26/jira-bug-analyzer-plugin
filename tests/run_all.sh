@@ -71,7 +71,10 @@ git -C "$LC" add -A && git -C "$LC" commit -qm init && git -C "$LC" push -q orig
 LG() { HOME="$LH" bash "$ASSETS/ledger.sh" "$@"; }
 check "new file: creates the canonical table and pushes" "LEDGER_COMMIT=" "$(LG upsert N ph N-1 status=analyzed dev=me 'summary=a | b')"
 check "new file: pipe in a value is escaped" '| N-1 | analyzed |  | me | a \| b |' "$(cat "$LC/project/N/ph/session/record_bug_status.md")"
-LG upsert P ph P-1 status=pr-created pr=u >/dev/null; LG upsert P ph P-2 status=analyzed >/dev/null
+WR="$TMP/wrepo"; git init -q "$WR"; git -C "$WR" commit -q --allow-empty -m init -c user.email=t@t -c user.name=t 2>/dev/null || git -C "$WR" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+NOGH="$TMP/nogh"; mkdir -p "$NOGH"; printf '#!/bin/sh\nexit 1\n' > "$NOGH/gh"; chmod +x "$NOGH/gh"   # offline: no GitHub lookups
+LGW() { HOME="$LH" PATH="$NOGH:$PATH" bash "$ASSETS/ledger.sh" "$@"; }
+LGW_OUT="$(LGW upsert P ph P-1 status=pr-created pr=https://github.com/o/r/pull/7 --root "$WR")"; LG upsert P ph P-2 status=analyzed >/dev/null
 out="$(cat "$LC/project/P/ph/session/record_bug_status.md")"
 check "sections: updates the ticket's block" "- status: pr-created" "$out"
 check "sections: adds a new ticket block, keeps the old one" "## P-2" "$out"
@@ -86,7 +89,25 @@ case "$(cat "$LC/project/Q/ph/session/record_bug_status.md")" in *Q-2*) bad "del
 out="$(LG upsert R ph R-1 status=analyzed 2>&1 || true)"
 check "unreadable file is never overwritten" "LEDGER_ERROR=unrecognised" "$out"
 check "unreadable file left as it was" "free notes" "$(cat "$LC/project/R/ph/session/record_bug_status.md")"
-check "every write reached the remote" "ledger Q-2 delete" "$(git --git-dir="$TMP/mem.git" log --oneline -1)"
+check "pr-created also puts the PR on the watch list" "PR_WATCH=added #7" "$LGW_OUT"
+check "watch entry carries the ticket" '"key": "P-1"' "$(cat "$WR/.jira-bug/pr-watch.json")"
+check "watch file is git-excluded" ".jira-bug/" "$(cat "$WR/.git/info/exclude")"
+out="$(LGW upsert N ph N-9 status=pr-created pr=https://github.com/o/r/pull/7 --root "$WR")"
+check "pr-created with no earlier analyzing row is flagged" "LEDGER_WARN=N-9" "$out"
+check "a batch PR gains the second ticket" "PR_WATCH=updated #7" "$out"
+git -C "$WR" worktree add -q "$TMP/wt1" -b wt1 2>/dev/null
+check "from a worktree the entry lands in the main checkout" "wrepo/.jira-bug/pr-watch.json" "$(PATH="$NOGH:$PATH" bash "$ASSETS/pr-watch.sh" add "$TMP/wt1" https://github.com/o/r/pull/8 N-10)"
+check "drop removes an entry" "PR_WATCH=dropped #8" "$(bash "$ASSETS/pr-watch.sh" drop "$WR" 8)"
+check "every write reached the remote" "ledger N-9 pr-created" "$(git --git-dir="$TMP/mem.git" log --oneline -1)"
+
+echo "build-task-check.sh — the build task must exist in this project"
+BT="$TMP/bt"; mkdir -p "$BT"
+printf '#!/bin/sh\nprintf "Build tasks\\n-----------\\napp:assembleDevDebug - Assembles DevDebug\\napp:assembleProdDebug - x\\napp:assembleDevRelease - x\\n"\n' > "$BT/gradlew"; chmod +x "$BT/gradlew"
+check "an existing task is ok" "BUILD_TASK=ok" "$(bash "$ASSETS/build-task-check.sh" "$BT" "./gradlew assembleDevDebug")"
+out="$(bash "$ASSETS/build-task-check.sh" "$BT" "./gradlew assembleAppDevDebug")"
+check "a missing task is reported with candidates" "BUILD_TASK=missing TASK=assembleAppDevDebug CANDIDATES=assembleDevDebug,assembleProdDebug" "$out"
+check "no gradlew is unknown, not a failure" "BUILD_TASK=unknown" "$(bash "$ASSETS/build-task-check.sh" "$TMP" "./gradlew x")"
+check "init says where BUILD_CMD came from" "BUILD_CMD_SOURCE=default" "$(HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$TMP/bt" 2>&1)"
 
 echo "fetch-media-links.sh — screenshot share links become files (offline, file:// fixtures)"
 FM="$TMP/fml"; mkdir -p "$FM/site"

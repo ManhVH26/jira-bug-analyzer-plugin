@@ -13,12 +13,16 @@
 # A new file is created as a table with the canonical columns (references/helpers/memory.md).
 #
 # Usage:
-#   ledger.sh upsert <PROJ> <PHASE> <TICKET> key=value [key=value ...] [--no-push]
+#   ledger.sh upsert <PROJ> <PHASE> <TICKET> key=value [key=value ...] [--no-push] [--root <project>]
 #   ledger.sh get    <PROJ> <PHASE> <TICKET>
 #   ledger.sh delete <PROJ> <PHASE> <TICKET> [--no-push]
 # Keys: status root_cause_slug dev summary files pr auto_eval reopen_reason reopen_note (any other key
 # is accepted and added). `updated` is set to today automatically.
 # Output: LEDGER_COMMIT=<sha> FILE=<path>   |   LEDGER_ROW=...   |   LEDGER_ERROR=<why> (exit 1)
+# status=pr-created with pr=<url> also registers the PR in <project>/.jira-bug/pr-watch.json
+# (assets/pr-watch.sh; <project> = --root, default the current directory) and prints PR_WATCH=… —
+# one command, so the --manager hand-off cannot be dropped the way the prose Step 3 was (AAP857-113).
+# LEDGER_WARN=… flags a pr-created with no earlier analyzing/analyzed row (Phase 3 checklist skipped).
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,10 +30,12 @@ CMD="${1:-}"; PROJ="${2:-}"; PHASE="${3:-}"; TICKET="${4:-}"
 [ -n "$CMD" ] && [ -n "$PROJ" ] && [ -n "$PHASE" ] && [ -n "$TICKET" ] || {
   echo "usage: ledger.sh {upsert|get|delete} <PROJ> <PHASE> <TICKET> [key=value ...] [--no-push]"; exit 2; }
 shift 4
-PUSH=1; KV=()
+PUSH=1; KV=(); ROOT="$PWD"; NEXT_ROOT=0
 for a in "$@"; do
+  if [ "$NEXT_ROOT" -eq 1 ]; then ROOT="$a"; NEXT_ROOT=0; continue; fi
   case "$a" in
     --no-push) PUSH=0 ;;
+    --root) NEXT_ROOT=1 ;;
     *=*) KV+=("$a") ;;
     *) echo "LEDGER_ERROR=bad argument '$a' (expected key=value)"; exit 1 ;;
   esac
@@ -102,6 +108,7 @@ if mode == "table":
             hdr += new; low += [k.lower() for k in new]
         cur = (cells(lines[hit]) if hit is not None else [""] * len(hdr))
         cur += [""] * (len(hdr) - len(cur))
+        if "status" in low: print("PRIOR=" + cur[low.index("status")])
         cur[tcol] = ticket
         for k, v in fields.items():
             cur[low.index(k.lower())] = esc(v)
@@ -126,6 +133,7 @@ else:  # sections
             lines += ["", f"## {ticket}"]
             start, end = len(lines) - 1, len(lines)
         body = lines[start + 1:end]
+        print("PRIOR=" + next((l.split(":", 1)[1].strip() for l in body if re.match(r"^-\s*status\s*:", l)), ""))
         for k, v in fields.items():
             idx = next((j for j, l in enumerate(body) if re.match(r"^-\s*" + re.escape(k) + r"\s*:", l)), None)
             if idx is None:
@@ -144,14 +152,28 @@ print("CHANGED=" + ("1" if changed else "0"))
 PY
 }
 
+kv() { printf '%s\n' "${KV[@]+"${KV[@]}"}" | sed -n "s/^$1=//p" | head -1; }
+STATUS="$(kv status)"; PR_URL="$(kv pr)"
+
+watch() { # status=pr-created + pr=<url> -> the PR goes on --manager's list; failure is loud (exit 1)
+  [ "$CMD" = "upsert" ] && [ "$STATUS" = "pr-created" ] && [ -n "$PR_URL" ] || return 0
+  bash "$SELF_DIR/pr-watch.sh" add "$ROOT" "$PR_URL" "$TICKET" "$(kv summary)" || WATCH_FAILED=1
+}
+WATCH_FAILED=0
+
 [ "$PUSH" -eq 1 ] && pull
 OUT="$(edit)" || { printf '%s\n' "$OUT"; exit 1; }
 if [ "$CMD" = "get" ]; then printf '%s\n' "$OUT" | grep '^LEDGER_ROW='; exit 0; fi
+PRIOR="$(printf '%s\n' "$OUT" | sed -n 's/^PRIOR=//p' | head -1)"
+if [ "$STATUS" = "pr-created" ]; then
+  case "$PRIOR" in analyzing|analyzed|pr-created|reopened*|fixing) ;;
+    *) echo "LEDGER_WARN=$TICKET had no analyzing/analyzed row before pr-created (prior='${PRIOR}') — Phase 3 checklist (claim + ledger) was skipped" ;;
+  esac
+fi
 if ! printf '%s\n' "$OUT" | grep -q '^CHANGED=1'; then
-  echo "LEDGER_COMMIT=$(git -C "$CLONE" rev-parse --short HEAD) FILE=$REL (no change)"; exit 0
+  echo "LEDGER_COMMIT=$(git -C "$CLONE" rev-parse --short HEAD) FILE=$REL (no change)"; watch; exit "$WATCH_FAILED"
 fi
 
-STATUS="$(printf '%s\n' "${KV[@]+"${KV[@]}"}" | sed -n 's/^status=//p' | head -1)"
 git -C "$CLONE" add "$REL"
 git -C "$CLONE" commit -q -m "chore($PROJ): ledger $TICKET ${STATUS:-$CMD}"
 if [ "$PUSH" -eq 1 ]; then
@@ -162,3 +184,4 @@ if [ "$PUSH" -eq 1 ]; then
   done
 fi
 echo "LEDGER_COMMIT=$(git -C "$CLONE" rev-parse --short HEAD) FILE=$REL"
+watch; exit "$WATCH_FAILED"

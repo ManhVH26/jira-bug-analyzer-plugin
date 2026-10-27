@@ -8,14 +8,9 @@ Read this when arming the watcher on PR creation (Phase 6), or when running the 
 1. **New review comments → notify + draft, apply on approval:** while the PR is open, detect review/line/issue comments from other reviewers and **notify** with a summary. Drafting a fix per comment and applying it (edit + push + reply) happens **interactively on the dev's approval** — never auto-edited unattended (review comments are often questions/ambiguous).
 2. **Merge/close → clean up:** detect the PR leaving OPEN and **remove the fix worktree** (kept open until now so review fixes were possible), then drop the watch entry.
 
-## ⚠️ How the watcher actually triggers — read before trusting "auto"
+## How the watcher triggers
 
-`CronCreate` is **NOT a background daemon.** Per its own contract: jobs *"only fire while the REPL is idle"* and (unless `durable: true`) are *"gone when Claude exits."* There is **no process that runs while Claude is closed.** So there are exactly two real triggers, and the **second is the load-bearing one**:
-
-- **(A) In-session cron** — the 1-min poll fires *only while this Claude session stays open and idle*. Good for catching review comments minutes later while the dev is still around. Useless once the session closes.
-- **(B) `--manager` reconcile** — running `/jira-bug-analyzer --manager <KEY>` reads the **watch file**, surfaces & fixes pending review comments, cleans up any merged/closed PR's worktree, and backfills the KB. This is the durable path that survives session death — **but only if the watch file was written.** (A normal skill start also does the *minimal* Init-5 worktree cleanup, but the full reconcile is manager mode.)
-
-**Therefore the watch-file write — not the cron — is the arming action.** If the file write fails, arming failed: say so (review comments won't be auto-surfaced; re-run `--manager` to reconcile). The cron is best-effort sugar on top. Never tell the dev "it watches in the background even if you close Claude" — tell them "it surfaces comments if this session is still open, otherwise the next time you run `--manager`." Nothing here gates the ticket's resolution — that already happened at PR creation.
+There is no background process. The watcher acts **only when `/jira-bug-analyzer --manager <KEY>` runs** — once after each QA-verify round, before the next fix round (`--loop` only if the dev asks for one). It reads the **watch file**, surfaces pending review comments, cleans up merged/closed PRs' worktrees and backfills the KB. A PR missing from the watch file is invisible to it, so the watch-file entry is the whole arming. (A normal skill start also does the *minimal* Init-5 worktree cleanup.) Never tell the dev "it watches in the background" — tell them comments surface at the next `--manager` run. Nothing here gates the ticket's resolution — that already happened at PR creation.
 
 ## Watch state file
 
@@ -25,13 +20,13 @@ Read this when arming the watcher on PR creation (Phase 6), or when running the 
 {
   "<PR>": {
     "pr": 123,
+    "url": "https://github.com/<org>/<repo>/pull/123",
     "base": "main",
     "branch": "phase1/fixbug/AIP568-191",
     "worktree": "../learnova-AIP568-191",
     "tickets": [
       { "key": "AIP568-191", "summary": "Energy reward missing on highscore streak" }
     ],
-    "cronId": "<cron id from CronCreate>",
     "createdAt": "<ISO8601>",
     "commentsCursor": "<ISO8601 of the newest review comment already notified — init = arm time>"
   }
@@ -42,21 +37,13 @@ Read this when arming the watcher on PR creation (Phase 6), or when running the 
 
 Batch = one PR, many entries in `tickets`.
 
-## Arm (Fix-13, after the ticket is Resolved + PR link commented)
+## Arm (Phase 6, at PR creation)
 
-Ask **as options** `Watch for review comments` (default) / `Don't watch`.
+`assets/ledger.sh upsert … status=pr-created pr=<url> --root <repo root>` calls `assets/pr-watch.sh add` — it writes the entry into the MAIN checkout's `.jira-bug/pr-watch.json` (even when run from the worktree), adds `.jira-bug/` to `.git/info/exclude`, reads the file back and prints `PR_WATCH=added|updated|unchanged #<n>`. A batch PR gains one `tickets` item per ticket. `PR_WATCH_ERROR=` → arming failed: say so and give the dev the `pr-watch.sh add` command. No ask, no cron (AAP857-113 dropped the old ask-then-cron prose step entirely).
 
-**Watch** — arm in this order, because step 1 is the durable part and steps 2–3 are best-effort:
-1. **Write/append the PR entry to the watch file** (`.jira-bug/pr-watch.json` at the target project root; add it to `.git/info/exclude` first). **Then verify it on disk** (`test -f` + parse the JSON back). **If the write fails → arming FAILED:** tell the dev review comments won't be auto-surfaced and they must re-run the skill to reconcile. Do not claim the watcher is armed. (The ticket is already Resolved regardless.)
-2. Register (or reuse) **one** recurring `CronCreate` with **`durable: true`** polling **every 1 minute** (`* * * * *`), so it at least survives a Claude restart. Store the returned id as `cronId`.
-3. **Verify the cron registered** via `CronList`; if it's absent, **don't fail** — note that live polling is off, a `--manager` run still covers it, and continue.
-4. **Tell the dev the honest expectation** (don't overpromise): *"Armed. If this session stays open, new review comments surface within ~1 min; if you close Claude, they surface the next time you run `/jira-bug-analyzer --manager <KEY>`. The worktree is removed when the PR merges/closes."* Echo how to cancel (`CronDelete`).
+## Each `--manager` reconcile — per watch entry
 
-**Don't watch** — no watcher; the dev handles review comments themselves and removes the worktree manually after merge (`git worktree remove ../learnova-<...>`). The ticket is already Resolved.
-
-## Each cron fire (and each `--manager` reconcile) — per watch entry
-
-1. **Acquire an atomic per-PR lock** (`mkdir`-style, same pattern as `device-lock.md`, keyed by PR) so a cron fire and a startup reconcile never collide. Locked → skip this entry this pass.
+1. **Acquire an atomic per-PR lock** (`mkdir`-style, same pattern as `device-lock.md`, keyed by PR) so two `--manager` passes (or a `--loop` fire and a manual pass) never collide. Locked → skip this entry this pass.
 2. `gh pr view <PR> --json state -q .state`:
    - `OPEN` → **poll for new review comments** (below), then leave the entry, release lock, wait for the next fire.
    - `MERGED` or `CLOSED` → **remove the fix worktree** (`git worktree remove <worktree>`, if still present), notify a short per-PR summary (`merged` vs `closed without merge`), remove the entry. **Do NOT touch Jira** — already Resolved.
@@ -88,9 +75,7 @@ The session may have been killed while a PR was open. There are two recovery pat
 - **Minimal Init-5 cleanup (any skill start):** read the watch file and, for each `MERGED`/`CLOSED` PR, **remove the fix worktree** (if still present) + drop the entry. Cheap, non-interactive — keeps stale worktrees from piling up. It does NOT chase review comments or backfill the KB.
 - **Full reconcile (`/jira-bug-analyzer --manager <KEY>`):** the durable path — per PR:
   - `MERGED` or `CLOSED` → **remove the fix worktree** (if still present) and drop the entry. (No Jira work — already Resolved at PR creation.) Then **Job C KB-backfill** (`references/phase-manager-mode.md`).
-  - `OPEN` → ensure the watcher cron still exists; if its `cronId` is gone (cron was killed / session ended — the normal case), **re-`CronCreate` with `durable: true`** the 1-min poll so in-session detection resumes. Also **re-poll review comments since `commentsCursor`** and, if any are pending, surface them to the dev (the Address-comments flow) — catches comments left while the session/cron were dead.
+  - `OPEN` → **re-poll review comments since `commentsCursor`** and, if any are pending, surface them to the dev (the Address-comments flow).
+- File empty afterward → delete the file.
 
-> Because the cron dies with the session, an `OPEN` PR will almost always have a missing `cronId` at the next startup — that's expected, not an error. Re-arming the cron just restores live polling for as long as the new session stays open.
-- File empty afterward → `CronDelete` + delete the file.
-
-Same atomic per-PR lock as the cron fire, so a reconcile and a concurrently-firing cron don't collide.
+Same atomic per-PR lock as above.
