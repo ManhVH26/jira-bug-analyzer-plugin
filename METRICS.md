@@ -19,7 +19,7 @@ Mỗi phase có chỉ số đo được, mốc baseline (v1.15.2, đo ngày 27/1
 | P7 | `Agent(...)` không ghi model | 4 | 0 | 0 |
 | P7 | Phiên chính ghim model | không | `sonnet` | có |
 | S5 | Script không có strict mode và không ghi lý do | 8 | 0 | 0 |
-| S0 | Khoá bí mật trong repo | 2 | 2 | 0 (**tạm hoãn**) |
+| S0 | Phát hiện bảo mật của lint (đã báo riêng chủ repo) | 2 | 2 | 0 (**tạm hoãn**) |
 
 ## 2. Chỉ số khi chạy thật (đo sau khi fix bug thật)
 

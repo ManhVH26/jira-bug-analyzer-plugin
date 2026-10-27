@@ -32,7 +32,7 @@ Driven by AAP729 data (16–22/10/2026): `--auto` fixes were reopened 30 % (25/8
 - Run `/plugin marketplace update apero-tools`.
 - Projects that are not `appDev` flavored: answer the one build-task question (saved to `setup.json`).
 - Teams using `@claude` on Jira from QA/PO accounts: add them to `setup.json` `allowedCommenters`.
-- Known: 2 credentials remain in `assets/mcp-setup-template.json` (S0 deferred; tracked in `scripts/lint-known-secrets.txt`).
+- Known: S0 (a security follow-up reported to the owner privately) is deferred; the lint tolerates its findings via `scripts/lint-known-secrets.txt`.
 
 ## 1.15.2 and earlier
 History is in the git log (`git log --oneline`); notable breaking releases: 1.12.0, 1.13.0, 1.14.0 (Discord flow rewrites).
