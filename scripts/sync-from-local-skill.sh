@@ -32,10 +32,22 @@ case "$SKILL_SRC" in
     fi ;;
 esac
 
+# Guard: the TeraKit copy on GitHub stopped at 2026-08-11 while this repo moved to v1.15.x. A source that
+# predates references/constants.md (v1.15.3) is older than this repo; rsync --delete would erase newer work.
+if [ -f "$DEST/references/constants.md" ] && [ ! -f "$SKILL_SRC/references/constants.md" ] && [ "${FORCE_OLDER_SRC:-0}" != "1" ]; then
+  echo "ERROR: $SKILL_SRC has no references/constants.md — it is older than this plugin (v1.15.3+)." >&2
+  echo "       Bring the source up to date first, or set FORCE_OLDER_SRC=1 if you really mean to roll back." >&2
+  exit 1
+fi
+
 echo "Syncing: $SKILL_SRC  ->  $DEST"
 mkdir -p "$DEST"
 # --delete so removed files in the source disappear here too. Never touch VCS/OS cruft.
 rsync -a --delete --exclude '.DS_Store' "$SKILL_SRC/" "$DEST/"
+
+echo ""
+echo "Lint + tests on the synced copy:"
+if bash "$REPO_ROOT/tests/run_all.sh"; then echo "All green."; else echo "WARNING: lint/tests failed — fix before committing." >&2; fi
 
 echo ""
 echo "Done. Review changes:"

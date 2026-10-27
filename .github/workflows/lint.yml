@@ -1,0 +1,20 @@
+name: lint-and-test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint skill (refs, tags, constants, models, size, secrets, bash)
+        run: python3 scripts/lint_skill.py
+      - name: shellcheck (errors only)
+        run: shellcheck -S error plugins/jira-bug-analyzer/skills/jira-bug-analyzer/assets/*.sh scripts/*.sh tests/*.sh
+      - name: Tests
+        run: bash tests/run_all.sh
+      - name: Static metrics (for the PR log)
+        run: python3 scripts/metrics.py

@@ -1,0 +1,30 @@
+{
+  "_source": "v1.15.2 (commit 83c250b), measured 2026-10-27. static = scripts/lint_skill.py --root <main checkout>; runtime = Jira status history (AAP729 + AIP568/AIP686/AIP806A), see METRICS.md",
+  "static": {
+    "skill_md_bytes": 47464,
+    "description_chars": 1177,
+    "golden_rules_bytes": 34666,
+    "lint_errors": 27,
+    "constant_copies": 12,
+    "build_cmd_hardcoded_files": 9,
+    "agent_spawns_without_model": 4,
+    "main_model_pinned": false,
+    "scripts_without_strict_mode": 8,
+    "secrets_found": 2,
+    "has_ci": false,
+    "test_count": 0
+  },
+  "runtime": {
+    "aap729_auto_reopen_rate": 0.301,
+    "aap729_auto_reopen": "25/83",
+    "aap729_baseline_reopen_rate": 0.16,
+    "aap729_baseline_reopen": "8/50",
+    "all_projects_auto_reopen": "31/101",
+    "auto_low_reopen": "23/77",
+    "auto_normal_reopen": "8/24",
+    "deferred_then_autofixed": "8 (8 reopened)",
+    "job_d_label_missed_reopens": 12,
+    "manager_quiet_fire_share": null,
+    "tokens_per_session": null
+  }
+}
