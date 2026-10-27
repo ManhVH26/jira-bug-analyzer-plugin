@@ -4,6 +4,7 @@ Lookup table for failures during any mode. Read on demand when something errors.
 
 | Error | Action |
 |-------|--------|
+| Preflight `DEP=jira-mcp-bin STATUS=missing`, or `setup-mcp.sh` prints `MISSING_BIN=mcp-atlassian`, or the `jira` server is configured but `mcp__jira__*` tools never appear | Install the executable: `uv tool install mcp-atlassian` (or `pipx install mcp-atlassian`), restart Claude Code, re-probe. See `references/helpers/environment-setup.md` → `jira-mcp-bin`. |
 | Preflight `TIER=now STATUS=missing` (`jira-mcp` / `jira-creds`) | HARD-BLOCK before intake — `AskUserQuestion` with concrete fix options (add creds / paste manually / cancel). Setup recipes in `references/helpers/environment-setup.md` |
 | Preflight `TIER=later`/`cond` `warn`/`missing` | Do NOT block at start — batch one warning line; re-probe that dep just-in-time before its gate (`references/helpers/environment-setup.md`) |
 | `preflight-env.sh` not found / not executable | `bash <skill-dir>/assets/preflight-env.sh <root>` (no need for +x); if absent, fall back to the manual catalog in `references/helpers/environment-setup.md` |

@@ -128,5 +128,10 @@ if skipped: print("EXISTS_SKIPPED: "+", ".join(skipped)+" (use --force to overwr
 if warned:
     if "jira" in warned:      print("WARN: jira JIRA_PERSONAL_TOKEN left as placeholder — pass --token <tok> (Claude Code won't expand ${VAR}).")
     if "human-mcp" in warned: print("WARN: human-mcp GOOGLE_GEMINI_API_KEY left as placeholder — set HUMAN_MCP_GEMINI_KEYS (comma-separated Gemini keys) in .claude/.env before setup; human-mcp rotates them internally.")
+import shutil
+for n in added:
+    cmd=(dest["mcpServers"][n] or {}).get("command","")
+    if cmd and cmd not in ("npx","cmd","uvx") and not shutil.which(cmd):
+        print(f"MISSING_BIN={cmd} (server '{n}' cannot start) INSTALL=\"uv tool install {cmd}\" (or pipx install {cmd})")
 print("RESTART_REQUIRED="+("yes" if added else "no")+" (reload the session so new mcp__* tools connect)")
 PY

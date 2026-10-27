@@ -70,8 +70,11 @@ Override when needed:
 
 ## Prerequisites
 
-The skill auto-installs its MCP servers on first run (jira, confluence, figma, human-mcp)
-and prompts for the per-dev `JIRA_PERSONAL_TOKEN`. It also expects, at their gates:
+The skill auto-installs its MCP server *config* on first run (jira, confluence, figma, human-mcp)
+and prompts for the per-dev `JIRA_PERSONAL_TOKEN` (Jira → Profile → Personal Access Tokens). The
+jira/confluence servers run the `mcp-atlassian` executable, which you install once per machine:
+`uv tool install mcp-atlassian` (or `pipx install mcp-atlassian`), then restart Claude Code.
+It also expects, at their gates:
 `gh` (authenticated), `adb` (for on-device verify), and a Gradle Android project for the
 fix/build phases.
 

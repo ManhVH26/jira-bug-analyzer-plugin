@@ -53,6 +53,13 @@ check "mac/linux uses npx directly" '"command": "npx"' "$(cat "$H/.claude.json")
 HOME="$H" MSYSTEM=MINGW64 bash "$ASSETS/setup-mcp.sh" figma --force >/dev/null 2>&1
 check "git-bash wraps npx in cmd /c" '"command": "cmd"' "$(cat "$H/.claude.json")"
 
+echo "missing mcp-atlassian is reported"
+HB="$TMP/mcpbin"; mkdir -p "$HB"
+out="$(HOME="$HB" PATH="/usr/bin:/bin" JIRA_PERSONAL_TOKEN=dummy bash "$ASSETS/setup-mcp.sh" jira 2>&1)"
+check "setup-mcp names the missing executable" "MISSING_BIN=mcp-atlassian" "$out"
+out="$(HOME="$HB" PATH="/usr/bin:/bin" bash "$ASSETS/preflight-env.sh" --now-only "$TMP" 2>&1)"
+check "preflight blocks on the missing executable" "DEP=jira-mcp-bin TIER=now STATUS=missing" "$out"
+
 echo "setup-json merge keeps JSON valid"
 S="$TMP/s.json"; printf '{\n  "board": "X"\n}\n' > "$S"
 bash "$ASSETS/setup-json.sh" merge-set "$S" buildCmd="./gradlew assembleDebug" >/dev/null

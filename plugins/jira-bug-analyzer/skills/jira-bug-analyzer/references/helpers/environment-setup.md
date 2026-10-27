@@ -17,6 +17,7 @@ Read this when **Init-1 — Environment preflight** reports a gap, or when a jus
 | DEP id | Tier | First needed | Purpose | Fix if missing |
 |---|---|---|---|---|
 | `jira-mcp` | now | Fix-3 | fetch/search tickets | **Auto-setup from the template:** `bash <skill-dir>/assets/setup-mcp.sh jira --token <JIRA_PERSONAL_TOKEN>` (merges the `jira` server def from `assets/mcp-setup-template.json` into `~/.claude.json`), then reload so `mcp__jira__*` connects; confirm with a real call. |
+| `jira-mcp-bin` | now | Fix-3 | the `mcp-atlassian` executable the `jira` (and `confluence`) MCP servers launch — a config entry alone never connects without it | **Install once per machine:** `uv tool install mcp-atlassian` (or `pipx install mcp-atlassian`), then restart Claude Code. `setup-mcp.sh` prints `MISSING_BIN=mcp-atlassian` when it is absent. |
 | `jira-creds` | now | Fix-1 claim | REST: comments, worklog, transitions, attachments, In-Progress claim | The same `setup-mcp.sh jira --token <tok>` writes `JIRA_URL` (from template) + the **literal** `JIRA_PERSONAL_TOKEN` into the `jira` server's `env` in **`~/.claude.json`** (user-global, uncommitted). NOT `.claude/.env` (Claude Code doesn't load it into MCP env). Readers check process env → `~/.claude.json` → `.mcp.json`. See `jira-rest-api.md` → Credential bootstrap. |
 | `confluence-mcp` | cond | source-of-truth capture | spec ground truth | **Auto-setup from the template:** `bash <skill-dir>/assets/setup-mcp.sh confluence` (ships the fixed Confluence URL+token). **`spec` is REQUIRED to provide** — if setup still can't connect, the dev pastes the Confluence link/section manually (no skip for spec); the *ask* blocks until supplied, then the digest captures in the background. |
 | `figma-mcp` | cond | source-of-truth capture | design ground truth | **Auto-setup from the template:** `bash <skill-dir>/assets/setup-mcp.sh figma` (ships the fixed Figma API key). **`figma` is REQUIRED to provide** — if it still can't connect, the dev pastes the Figma link/frame screenshots manually (no skip for figma); the *ask* blocks until supplied, then the digest captures in the background. |
@@ -49,7 +50,9 @@ bash <skill-dir>/assets/preflight-env.sh "<PROJECT_ROOT>"
    ```bash
    bash <skill-dir>/assets/setup-mcp.sh status   # → TEMPLATE_SERVERS= / PRESENT= / MISSING= / NEEDS_SETUP=
    ```
-2. **`NEEDS_SETUP=yes` → REQUIRED, AUTO-INSTALL (do NOT ask whether to).** First **drop any server already
+2. **First make sure the server executables exist** (`DEP=jira-mcp-bin`): if `mcp-atlassian` is not on PATH, run `uv tool install mcp-atlassian` (fallback `pipx install mcp-atlassian`; neither `uv` nor `pipx` → ask the dev to install `uv`). Without it the `jira`/`confluence` entries are written but never connect.
+   **Getting the `JIRA_PERSONAL_TOKEN` (per dev, once):** `https://jira.apero.vn` → avatar → **Profile** → **Personal Access Tokens** → **Create token**; it is shown once. The dev passes it in their own shell (`! JIRA_PERSONAL_TOKEN=<tok> bash <skill-dir>/assets/setup-mcp.sh jira`) so it never has to be pasted into the chat.
+3. **`NEEDS_SETUP=yes` → REQUIRED, AUTO-INSTALL (do NOT ask whether to).** First **drop any server already
    LIVE via another config** (ToolSearch `mcp__<server>__*` — e.g. figma via the Framelink connector is live
    even though `~/.claude.json` lacks a `figma` entry; don't reinstall it). For the genuinely-missing
    remainder, **run it immediately — no "shall I install?" / "cancel run" prompt:**
@@ -62,7 +65,7 @@ bash <skill-dir>/assets/preflight-env.sh "<PROJECT_ROOT>"
    (config written ≠ server connected). **Continue only once every template MCP is live.** **The ONLY
    thing to ask the dev is genuine input** — the `JIRA_PERSONAL_TOKEN` when it's unknown (see next bullet);
    provisioning itself is automatic.
-3. **Gates NEVER provision MCPs.** Setup happens ONLY here at init. The source-of-truth (confluence/figma)
+4. **Gates NEVER provision MCPs.** Setup happens ONLY here at init. The source-of-truth (confluence/figma)
    gate merely **re-confirms liveness**; it does not run `setup-mcp.sh`. (The verify gate uses `adb` directly — no MCP to re-confirm.) (Single-server
    form `setup-mcp.sh <server> --force` exists only for a manual targeted re-add — not part of the flow.)
 - Confluence + Figma ship with the team's fixed creds in the template → no prompt needed.

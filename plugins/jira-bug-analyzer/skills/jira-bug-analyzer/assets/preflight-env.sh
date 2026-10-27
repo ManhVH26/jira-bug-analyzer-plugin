@@ -75,7 +75,7 @@ PY
 # (gh/adb/gradle/figma/confluence/mobile/skills) — those are re-probed at their gates.
 if [ "$NOW_ONLY" -eq 1 ]; then
   python3 - "$MCP" "$HOME/.claude.json" <<'PY' 2>/dev/null
-import json,os,re,sys
+import json,os,re,shutil,sys
 servers={}
 for p in sys.argv[1:]:
     try: d=json.load(open(p))
@@ -86,6 +86,12 @@ if any(jira.search(k) for k in servers):
     print("DEP=jira-mcp TIER=now STATUS=ok")
 else:
     print("DEP=jira-mcp TIER=now STATUS=missing NEEDED_AT=1 HINT=no jira server in .mcp.json (and verify mcp__jira__ tools are connected)")
+# The jira server's command must resolve on PATH (template: mcp-atlassian); a config entry alone is not a live server.
+jcmd=next(((s or {}).get("command") for k,s in servers.items() if jira.search(k)), None) or "mcp-atlassian"
+if jcmd in ("npx","uvx","cmd") or shutil.which(jcmd):
+    print("DEP=jira-mcp-bin TIER=now STATUS=ok")
+else:
+    print("DEP=jira-mcp-bin TIER=now STATUS=missing NEEDED_AT=1 HINT=mcp-atlassian not on PATH — the jira/confluence MCP servers run it. Install: uv tool install mcp-atlassian (or pipx install mcp-atlassian), then restart Claude Code")
 # REST creds: process env FIRST, then the jira server's env block.
 tok=os.environ.get("JIRA_PERSONAL_TOKEN",""); url=os.environ.get("JIRA_URL","")
 if not tok or not url:
@@ -109,6 +115,8 @@ if [ "$(mcp_has '(^|_)jira')" = "1" ]; then
 else
   emit jira-mcp now missing 1 "no jira server in .mcp.json (and verify mcp__jira__ tools are connected)"
 fi
+if have mcp-atlassian; then emit jira-mcp-bin now ok "" ""
+else emit jira-mcp-bin now missing 1 "mcp-atlassian not on PATH — the jira/confluence MCP servers run it. Install: uv tool install mcp-atlassian (or pipx install mcp-atlassian), then restart Claude Code"; fi
 
 # Read process env FIRST (so creds exported into the env or living in ~/.claude.json both resolve),
 # then fall back to the jira server's env block in .mcp.json / ~/.claude.json.

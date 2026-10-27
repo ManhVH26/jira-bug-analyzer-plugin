@@ -27,6 +27,7 @@ Driven by AAP729 data (16–22/10/2026): `--auto` fixes were reopened 30 % (25/8
 ### Tooling
 - `scripts/lint_skill.py`, `tests/run_all.sh` (15 checks), CI `.github/workflows/lint.yml`, `scripts/metrics.py`, `scripts/reopen_report.py`, `scripts/token_report.py`, `tests/SCENARIOS.md`.
 - `scripts/sync-from-local-skill.sh` refuses a source older than this repo and runs the tests after syncing.
+- Preflight reports `DEP=jira-mcp-bin` and `setup-mcp.sh` prints `MISSING_BIN=` when the `mcp-atlassian` executable is absent (the jira/confluence config was written but never connected); install steps + how to create the Jira PAT documented.
 
 ### Migration
 - Run `/plugin marketplace update apero-tools`.
