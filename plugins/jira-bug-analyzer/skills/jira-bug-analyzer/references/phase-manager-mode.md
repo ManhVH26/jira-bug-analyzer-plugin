@@ -5,6 +5,7 @@ Every line is a command or a check; the end-of-run report quotes each one's evid
 - [ ] `bash <skill-dir>/assets/manager-precheck.sh "<root>" <KEY>` first; quiet → one line, end the pass.
 - [ ] Job D writes every outcome with `bash <skill-dir>/assets/ledger.sh upsert … status=done|reopened …` (interactive and `--auto` fixes) → quote `LEDGER_COMMIT=`.
 - [ ] Job B cleans worktrees only for PRs that are merged/closed.
+- [ ] Job C runs only on tickets Job D just marked `done` (or `done` rows without a `kb` field) — never a board-wide Done scan; it stamps `kb=…` via `ledger.sh` so a ticket is judged once.
 
 > A standalone **maintenance loop**, NOT part of the fix pipeline (Phases 1–6). It does the
 > post-fix housekeeping the fix flow defers: surface & fix **PR review comments**, **clean up
@@ -67,19 +68,15 @@ in-session cron fire), then `gh pr view <PR> --json state -q .state`:
 | State | Action |
 |---|---|
 | `OPEN` | **Job A** — poll review comments newer than `commentsCursor`, authored by someone **other than the token owner**. Leave the entry. |
-| `MERGED` / `CLOSED` | **Job B** (worktree cleanup) **+ Job C** (KB-backfill for the ticket(s) the PR carried) → drop the entry. |
+| `MERGED` / `CLOSED` | **Job B** (worktree cleanup); the ticket(s) the PR carried are judged by **Job D**, which hands newly-done ones to **Job C** → drop the entry. |
 | unreadable | keep the entry, surface after repeated failures, move on (`troubleshooting.md`). |
 
 Release the lock per entry. When `pr-watch.json` is empty afterward → `CronDelete` the watcher (if
 any) and delete the file.
 
-**Then: board scan for orphan Done tickets** — a PR may have merged + had its entry already pruned
-(by a prior run), or a ticket was resolved without an armed watcher. So also run a **read-only**
-`jira_search` over the board's persisted `pullQuery` JQL, re-scoped to **Done/Resolved** tickets,
-and for each one **not already represented** in this run's processed set → **Job C**. This is what
-makes KB-backfill reliable independent of watch-file state.
+**No board-wide Done scan.** Done tickets reach Job C only through Job D (below), and only tickets the skill fixed (they have a ledger row). A board scan would also hit every teammate's hand-made fix — rows Job C cannot judge — and spend an `opus` agent on each, every full pass. Job D reads the changelog, so a PR whose watch entry was pruned, or a ticket resolved without a watcher, is still caught.
 
-**Then: outcome scan → Job D** — every ticket the skill fixed on this board/phase: `labels = auto-fixed` **plus** every ledger row with `status` ∈ `pr-created|done` (interactive fixes carry no label), whose outcome is still open (`pending`, or `held` inside `REOPEN_WATCH_DAYS`, `references/constants.md`) → **Job D** (done/reopen tracking). Independent of watch-file state.
+**Then: outcome scan → Job D, then Job C on what Job D marked done** — every ticket the skill fixed on this board/phase: `labels = auto-fixed` **plus** every ledger row with `status` ∈ `pr-created|done` (interactive fixes carry no label), whose outcome is still open (`pending`, or `held` inside `REOPEN_WATCH_DAYS`, `references/constants.md`) → **Job D** (done/reopen tracking). Independent of watch-file state.
 
 **Then: Jobs E / F / G / H — DEFERRED load.** All four are Discord-related and ledger-driven:
 - **Job E** (deferred-ticket comment watcher) — load if the ledger has `analyzed-deferred` rows for this project+phase.
@@ -113,23 +110,29 @@ On `MERGED`/`CLOSED`: `git worktree remove <worktree>` (if still present), notif
 summary (`merged` vs `closed without merge`), drop the entry. **No Jira writes** — the ticket was
 already **Resolved at PR creation** (Phase 6); manager mode never resolves/worklogs/comments on merge.
 
-## Job C — KB-backfill (NEW — unattended, notify-only)
-The new responsibility: when a ticket reaches **Done** (PR merged, or board scan finds it
-Resolved/Done), decide whether its root cause belongs in the app-agnostic KB — **re-judging from the
+## Job C — KB-backfill (unattended, notify-only; runs AFTER Job D)
+Decide whether a fixed ticket's root cause belongs in the app-agnostic KB — **re-judging from the
 record, not trusting a flag set during the fix**. Runs **even without `--auto`** (no ask gate);
-just **notify** what changed. All writes are `[BGMEM]` background via the `memory-keeper` agent.
+just **notify** what changed.
 
-Per Done ticket, dispatch `memory-keeper` (**opus**, `run_in_background: true`) with the
+**Input — only these tickets, never a board scan (v1.15.3):**
+- tickets Job D moved to `status: done` in this pass, and
+- ledger rows already `status: done` that have **no `kb` field yet** (one-time backfill of older rows).
+
+A ticket without a ledger row (fixed by hand, outside the skill) is never judged. Once judged, the
+row carries `kb=…`, so later passes skip it — Job C costs one `opus` agent per fixed ticket, once.
+
+Per input ticket, dispatch `memory-keeper` (**opus**, `run_in_background: true`) with the
 `kb-upsert` brief (`references/helpers/memory.md` → Actions / schemas):
-1. Read this ticket's row in `project/<PROJ>/<PHASE>/session/record_bug_status.md` (its `root_cause_slug` + `summary` root cause + `files`).
+1. Read the row: `bash <skill-dir>/assets/ledger.sh get <PROJ> <PHASE> <TICKET>` (`root_cause_slug` + `summary` + `files`).
 2. **Re-judge `app_agnostic`** from the documented root cause: framework / SDK / platform-level
    (ads, billing, lifecycle, permissions, notifications, ExoPlayer/Media, OS quirks…) → **agnostic**;
    app-specific business logic / this app's screens & data → **not** agnostic. Do NOT rely on a flag
    the analyzer may or may not have set.
 3. **Agnostic & absent from KB** → `kb-upsert knowledgebase/<category>/<slug>.md` (English, the
    schema in `memory.md`). **Already present** → `times_seen++` + add this app to `apps`. **Not
-   agnostic** → skip (the session ledger already records it).
-4. Update the ticket's ledger row `status → done` in `record_bug_status.md`.
+   agnostic** → no KB write.
+4. Mark it judged: `bash <skill-dir>/assets/ledger.sh upsert <PROJ> <PHASE> <TICKET> kb=<category/slug|bump:<slug>|skip>` → quote `LEDGER_COMMIT=`.
 5. **Notify** one line per ticket: `KB upsert <category>/<slug>` | `KB bump <slug> (times_seen=N)`
    | `KB skip (app-specific)`.
 
