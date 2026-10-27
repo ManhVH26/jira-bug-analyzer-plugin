@@ -43,6 +43,19 @@ This verification **always runs** when invoked. You may NOT skip or shortcut it 
    - Re-run the **exact repro steps** end to end.
    - **Tap/click** the controls involved, **scroll** the relevant lists, navigate the adjacent screens.
    - Exercise **edge cases + adjacent actions** around the change (empty state, back-nav, rotation/config change, re-entry, rapid taps) that could regress.
+   - **State-change scenarios — MANDATORY when the bug touches one of these categories** (QA tests them, so a fix that only passes the happy-path repro gets reopened; these were the most-reopened auto-fixes on AAP729, 16–22/10/2026). Run every scenario whose category matches the ticket, re-check the acceptance criteria after each, and list them under **Exercised** in the verdict. All commands go through `device-lock.sh exec <serial> <owner-token> -- …`:
+
+     | Category | Scenario | `adb` (after `exec … --`) |
+     |---|---|---|
+     | Network | lose network on the screen, wait, restore; also start the screen offline | `shell svc wifi disable` · `shell svc data disable` → wait 5 s → `shell svc wifi enable` · `shell svc data enable` |
+     | Rotation / config | rotate mid-flow and back (video, timers, forms, lists) | `shell settings put system accelerometer_rotation 0` · `shell settings put system user_rotation 1` → `… user_rotation 0` |
+     | Background / foreground | leave and return mid-flow | `shell input keyevent KEYCODE_HOME` → wait 3 s → `shell am start -n <pkg>/<launcher>` |
+     | Process death | kill while backgrounded, reopen | `shell input keyevent KEYCODE_HOME` → `shell am kill <pkg>` → relaunch |
+     | Ads | enter / leave the screen holding the ad 3×, background while an ad shows | navigation taps + the background scenario above |
+     | Timing / per-day data | change the device date across midnight when the bug depends on "today" | `shell cmd alarm set-time <epoch-ms>` (or report `blocked` if not permitted on this device) |
+     | Performance / jank | repeat the action 10× quickly while recording | `shell screenrecord …` + `shell dumpsys gfxinfo <pkg>` before/after |
+
+     Restore the device after each scenario (network on, rotation back to auto with `accelerometer_rotation 1`, real time). A scenario that cannot run on this device → say so in **Exercised**; under `--auto` an unrunnable scenario for the ticket's own category is `blocked`, not `pass`.
    - **Capture SAVED evidence — medium chosen by the bug's nature (not optional under `--auto`):**
      - **Image** (`adb -s <serial> exec-out screencap -p > <evidence-dir>/<ticket>-<state>.png`) for a **static / visual** bug where one frame is the proof — layout, alignment, color/theme, text/copy, wrong state shown, missing/duplicated element, single-screen correctness. Save a shot at **each meaningful state** (before-fix-path landing → after-fix result).
      - **Video** (`adb -s <serial> shell screenrecord --time-limit 30 /sdcard/<ticket>.mp4` while you drive the repro, then `adb -s <serial> pull /sdcard/<ticket>.mp4 <evidence-dir>/` and `shell rm /sdcard/<ticket>.mp4`) for a **dynamic / sequential** bug where the *motion or sequence* is the proof — animation/transition, navigation/flow, scroll-jank, gesture, timing/race, media playback, or a **crash repro** (record up to the crash). Start `screenrecord` in the background, perform the exact steps, stop it.

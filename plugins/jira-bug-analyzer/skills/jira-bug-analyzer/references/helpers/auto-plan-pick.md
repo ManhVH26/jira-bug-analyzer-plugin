@@ -7,13 +7,14 @@
 
 ## Tiêu chí quyết định
 - **Score `sum ≥ threshold`** → auto-approve → fix luôn (Phase 4). **Threshold tách theo `[REPRO_ON]` + modifier `--auto-low`:**
-  - `[REPRO_ON]=true` (user opt-in qua `--repro` hoặc NL intent) → **threshold = 80** (quy tắc cũ).
-  - `[REPRO_ON]=false` (mặc định — không có `--repro`) → **threshold = 90**. Lý do: không có điểm `deterministic_repro` (A7c), nâng ngưỡng để bù phần rigor đã mất.
-  - **`--auto-low` present (modifier any `--auto` run)** → **threshold = 40** (floor) + **`[LOW-RISK-GATE]` ADDITIONAL check** (bên dưới). Dùng khi dev muốn giảm độ chặt — AI đang defer quá nhiều ticket có plan hợp lý nhưng score thấp. Mọi ticket fix dưới nhánh này đeo **cả hai** Jira label `auto-fixed` + `auto-fix-low` (Phase 6) để Manager Job D track reopen-rate riêng (metric chất lượng của low-conf fixes).
-  - In rõ `[REPRO_ON]` + `[AUTO_LOW]` + threshold đã chọn vào scorecard khối Fix-6 để dev soi được.
+  - `[REPRO_ON]=true` (user opt-in qua `--repro` hoặc NL intent) → **threshold = `AUTO_THRESHOLD_REPRO`**.
+  - `[REPRO_ON]=false` (mặc định — không có `--repro`) → **threshold = `AUTO_THRESHOLD_DEFAULT`**. Lý do: không có điểm `deterministic_repro` (A7c), nâng ngưỡng để bù phần rigor đã mất.
+  - **`--auto-low` present (modifier any `--auto` run)** → **threshold = `AUTO_THRESHOLD_LOW`** (floor) + **`[LOW-RISK-GATE]` ADDITIONAL check** (bên dưới). Dùng khi dev muốn giảm độ chặt — AI đang defer quá nhiều ticket có plan hợp lý nhưng score thấp. Mọi ticket fix dưới nhánh này đeo **cả hai** Jira label `auto-fixed` + `auto-fix-low` (Phase 6) để Manager Job D track reopen-rate riêng (metric chất lượng của low-conf fixes).
+  - Giá trị các ngưỡng: `references/constants.md`. In rõ `[REPRO_ON]` + `[AUTO_LOW]` + threshold đã chọn vào scorecard khối Fix-6 để dev soi được.
+- **Phạm vi `--auto` (`AUTO_SCOPE`, R5 v1.15.3):** mặc định `ui-only` — ticket có scope Phase 3 là **hành vi** (cùng phân loại dùng để chọn verifier Phase 5: mạng, vòng đời màn hình, xoay, quảng cáo, timing/dữ liệu theo ngày, hiệu năng; kể cả UI + hành vi) → **defer `behavioral-scope`** dù score đạt ngưỡng, kèm comment `[VN]`: *"Bug hành vi — để dev sửa ở single mode (duyệt plan + kiểm thử trên máy)."* Lý do: nhóm này bị reopen nhiều nhất khi tự sửa (AAP729, 16–22/10/2026). Mở lại cho `--auto` bằng `setup.json` `autoScope: "all"` **chỉ khi** `scripts/reopen_report.py` cho thấy reopen của `--auto` ≤ mức của bug không-auto trong cùng project trên ≥ 50 ticket (R7).
 
-### `[LOW-RISK-GATE]` — chỉ áp khi `--auto-low` (sau khi score ≥ 40)
-Trước khi approve fix, dispatch `code-reviewer` agent (hoặc Phase 3 analyzer tự judge với prompt dưới) với **fix plan + Phase-3 analysis + related files** làm input. Agent trả **pass/fail** cho câu hỏi:
+### `[LOW-RISK-GATE]` — chỉ áp khi `--auto-low` (sau khi score đạt `AUTO_THRESHOLD_LOW`, `references/constants.md`)
+Trước khi approve fix, dispatch `code-reviewer` agent (`model: opus` — rào thứ hai, không tiết kiệm ở đây) (hoặc Phase 3 analyzer tự judge với prompt dưới) với **fix plan + Phase-3 analysis + related files** làm input. Agent trả **pass/fail** cho câu hỏi:
 
 > *"Plan này có **reasonable** (giải thích đúng root cause, không guess) + **low-risk** (scope hẹp — ≤ vài file đã biết; blast-radius giới hạn — không đụng Clean-Arch layer boundary / design-system token / shared composable toàn app; không gây regression rõ) không?"*
 
@@ -21,8 +22,8 @@ Trước khi approve fix, dispatch `code-reviewer` agent (hoặc Phase 3 analyze
 - **Fail** → **defer** với reason `low-risk-check-failed` (ghi lý do fail từ agent vào ledger row + report). KHÔNG retry — defer là final cho ticket đó trong turn này (dev reply `@claude fix` trên Jira sẽ trigger Job E re-analyze).
 - **Agent `blocked` / error** → defer `low-risk-check-blocked` (an toàn hơn là fix mù).
 
-Gate này tồn tại vì `--auto-low` hạ threshold xuống 40 — mất rào ngưỡng chính; LLM judge gate là rào thứ hai, chặn fix mù những bug thực sự nguy hiểm chỉ vì score tình cờ ≥ 40.
-- **Không reproduce được on-device** — CHỈ áp khi `[REPRO_ON]=true` (`bug-analysis-rules.md` `[REPRO]` A7a/A10) → **defer** (`unreproducible` hoặc `no-device`); **dưới `--auto` + `--repro` device là BẮT BUỘC, không có static fallback** — không có máy / không lấy được device lock trong thời gian chờ / chạy hết ladder vẫn không repro → defer + report. `--auto --repro` KHÔNG BAO GIỜ auto-fix một bug chưa reproduce được trên máy. **`[REPRO_ON]=false`: KHÔNG defer vì không có repro** — mặc định là bỏ qua bước này; chỉ ngưỡng 90 bù lại.
+Gate này tồn tại vì `--auto-low` hạ threshold xuống `AUTO_THRESHOLD_LOW` — mất rào ngưỡng chính; LLM judge gate là rào thứ hai, chặn fix mù những bug thực sự nguy hiểm chỉ vì score tình cờ chạm `AUTO_THRESHOLD_LOW`.
+- **Không reproduce được on-device** — CHỈ áp khi `[REPRO_ON]=true` (`bug-analysis-rules.md` `[REPRO]` A7a/A10) → **defer** (`unreproducible` hoặc `no-device`); **dưới `--auto` + `--repro` device là BẮT BUỘC, không có static fallback** — không có máy / không lấy được device lock trong thời gian chờ / chạy hết ladder vẫn không repro → defer + report. `--auto --repro` KHÔNG BAO GIỜ auto-fix một bug chưa reproduce được trên máy. **`[REPRO_ON]=false`: KHÔNG defer vì không có repro** — mặc định là bỏ qua bước này; chỉ ngưỡng `AUTO_THRESHOLD_DEFAULT` bù lại.
 - **Không phải bug code thật** (config/console · backend · stale build/env/device · works-as-designed · duplicate — A1/A2) → route Fix-9 (non-code comment) / defer; không tự chế fix.
 - **Score `sum < threshold`** → **defer + report** (mark `deferred`, không fix), ghi lý do `score <threshold (sum=N, [REPRO_ON]=<true|false>, [AUTO_LOW]=<true|false>)`.
 - **Còn câu hỏi chưa rõ** (SOT có, nhưng không trả lời được câu hỏi của ticket) → **defer** (`clarify-gap`); auto KHÔNG tự đoán.
@@ -31,11 +32,11 @@ Gate này tồn tại vì `--auto-low` hạ threshold xuống 40 — mất rào 
 - **Trùng** `root_cause_slug` ticket khác → **skip** (mark `commented`, ghi ticket gốc); không "fix anyway".
 
 ## Khi defer — chuyển sang "Request" rồi ĐI TIẾP (không dừng loop)
-Mỗi khi một ticket bị defer (score <80 / clarify-gap / **no-sot** / mid-fix wrong-plan / **unreproducible / no-device**), dưới `--auto`:
+Mỗi khi một ticket bị defer (score dưới ngưỡng / **behavioral-scope** / clarify-gap / **no-sot** / mid-fix wrong-plan / **unreproducible / no-device**), dưới `--auto`:
 1. **Transition ticket → `Request`** (REST, `jira_transition`) — đưa nó RA KHỎI `In Progress` và trả về pool triage mở để người (hoặc một lần chạy sau có thêm thông tin) tiếp nhận. **Giữ assignee = dev account** (người đã claim) để biết ai đã phân tích. Verify `now=Request` qua readback. (Nếu workflow không có transition tên `Request`, dùng status mở gần nhất; nếu thực sự không thoát được `In Progress` thì để nguyên + ghi chú trong report.)
 2. **Defer notification — Jira comment + Discord ping là MỘT BƯỚC ATOMIC, không được tách:**
    - **2.a (Jira, bắt buộc):** Post 1 comment `[VN]` ngắn lên ticket: lý do defer + tóm tắt plan đã có (để người sau làm tiếp), kèm link ledger slug. (`[REST]`, verify 201.)
-   - **2.b (Discord, BẮT BUỘC khi `[DISCORD-DEFER]` opt-in bật):** Nếu `--discord-defer` present HOẶC env `JIRA_BUG_DISCORD_DEFER=1` → **PHẢI gọi** `references/helpers/discord-notify-defer.md` NGAY SAU khi 2.a verify 201, trong cùng turn. Non-blocking về mặt **fail** (curl fail → log + đi tiếp), nhưng **KHÔNG non-blocking về mặt skip**: bỏ qua call này khi opt-in bật = **vi phạm spec**. Opt-in OFF (cả flag lẫn env đều không set) → skip hợp lệ. **Ghi thêm vào ledger row (v2a+): `discord_defer_enabled: true` + `discord_last_processed_message_id: 0`** để Job F (`discord-resolve-watcher.md`) biết ticket này eligible cho resolve post khi PR open.
+   - **2.b (Discord, BẮT BUỘC khi `[DISCORD-DEFER]` opt-in bật):** Nếu `--discord-defer` present HOẶC env `JIRA_BUG_DISCORD_DEFER=1` → **PHẢI gọi** `references/discord/discord-notify-defer.md` NGAY SAU khi 2.a verify 201, trong cùng turn. Non-blocking về mặt **fail** (curl fail → log + đi tiếp), nhưng **KHÔNG non-blocking về mặt skip**: bỏ qua call này khi opt-in bật = **vi phạm spec**. Opt-in OFF (cả flag lẫn env đều không set) → skip hợp lệ. **Ghi thêm vào ledger row (v2a+): `discord_defer_enabled: true` + `discord_last_processed_message_id: 0`** để Job F (`discord-resolve-watcher.md`) biết ticket này eligible cho resolve post khi PR open.
    - **Khi delegate defer sang sub-agent (defer-handler):** prompt của sub-agent PHẢI liệt kê CẢ 2.a và 2.b — không được tóm tắt thành "post VN comment" rồi drop 2.b. Checklist bắt buộc trong sub-agent prompt: `[ ] 2.a Jira comment 201` + `[ ] 2.b Discord ping (nếu opt-in bật)`. Sub-agent báo cáo lại trạng thái từng cái.
 3. Giữ nguyên ledger row `analyzed-deferred` (root_cause_slug + summary + files) + thêm vào end-of-run report.
 4. **ĐI TIẾP NGAY sang ticket/batch kế** — **defer KHÔNG BAO GIỜ là điều kiện dừng loop.** Loop chỉ dừng khi re-pull trả về 0 ticket (board rỗng) hoặc gặp `[AUTO-GATE]` do dev định nghĩa. **Vì `Request` NẰM TRONG pool pull, chống re-pick KHÔNG dựa vào status mà dựa vào DEDUP:** `.jira-bug/batch-progress.md` (cùng session) + ledger row `analyzed-deferred` (cross-session). `auto-ticket-pick.md` BỎ QUA mọi ticket đã `analyzed-deferred`. **Resume ticket deferred được xử lý CHỦ ĐỘNG bởi Job E** (`references/phase-manager-mode.md` → "Job E — Deferred-ticket comment watcher") — khi dev reply trên Jira với marker `@claude`/`@agent`, Job E xoá ledger row + re-analyze với comment làm clarify.
@@ -47,7 +48,7 @@ Ledger row `analyzed-deferred` có các field sau (ví dụ):
 TICKET: APDF1-2251
 status: analyzed-deferred
 date: 2026-10-15T10:30:00Z
-reason: no-sot                  # score-lt-threshold | clarify-gap | no-sot | mid-fix-wrong-plan | unreproducible | no-device | low-risk-check-failed | low-risk-check-blocked
+reason: no-sot                  # score-lt-threshold | behavioral-scope | clarify-gap | no-sot | mid-fix-wrong-plan | unreproducible | no-device | low-risk-check-failed | low-risk-check-blocked
 root_cause_slug: ...
 summary: ...
 files: ...
@@ -61,4 +62,4 @@ review_requested_by_comment:    # optional/nullable — Job E Review branch set 
 > **Base build hỏng (vd `origin/develop` không compile) KHÔNG phải lý do dừng** — đây là case "try-and-decide" của Golden Rule `[AUTO]`: fold bản unbreak tối thiểu vào nhánh fix hiện tại (hoặc branch các fix kế off nhánh batch đã chứa unbreak), ghi vào report, đi tiếp. Đừng pause loop chờ người.
 
 ## Single mode
-Cùng tiêu chí cho 1 ticket: `sum ≥ threshold` → fix; `<threshold` / clarify-gap → defer + report. Threshold matrix: `--auto-low` → 40 (+ `[LOW-RISK-GATE]`); else `[REPRO_ON]=true` → 80; else → 90. Defer cũng PARK sang `Request` như trên (single thì park xong là kết thúc, không có batch kế).
+Cùng tiêu chí cho 1 ticket: `sum ≥ threshold` → fix; `<threshold` / clarify-gap → defer + report. Threshold matrix: `--auto-low` → `AUTO_THRESHOLD_LOW` (+ `[LOW-RISK-GATE]`); else `[REPRO_ON]=true` → `AUTO_THRESHOLD_REPRO`; else → `AUTO_THRESHOLD_DEFAULT` (`references/constants.md`). Phạm vi `AUTO_SCOPE` áp dụng như trên. Defer cũng PARK sang `Request` như trên (single thì park xong là kết thúc, không có batch kế).

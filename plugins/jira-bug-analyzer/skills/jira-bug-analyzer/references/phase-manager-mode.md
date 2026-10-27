@@ -44,7 +44,13 @@ recurring loop is armed for this board+phase — idempotently, via a marker file
    (from the marker) + delete the marker. Only stop when the dev asks.
 
 ### Discord inbox in-session watcher — DEFERRED load
-If env `JIRA_BUG_DISCORD_DEFER=1`, arm the Bash+Monitor file-watch on `.jira-bug/discord-inbox/`. **The full setup + lifecycle lives in `references/helpers/manager-discord-jobs.md` → "Discord inbox in-session watcher"**. Load that file ONLY when env is set — otherwise skip entirely. If env unset: skip arm (silent, no log needed).
+If env `JIRA_BUG_DISCORD_DEFER=1`, arm the Bash+Monitor file-watch on `.jira-bug/discord-inbox/`. **The full setup + lifecycle lives in `references/discord/manager-discord-jobs.md` → "Discord inbox in-session watcher"**. Load that file ONLY when env is set — otherwise skip entirely. If env unset: skip arm (silent, no log needed).
+
+## Precheck — FIRST step of every pass (P7, v1.15.3)
+Before reading anything else (no Discord file, no ledger, no job text), run `bash <skill-dir>/assets/manager-precheck.sh "<root>" <KEY>` and act on its lines:
+- `LOCAL=quiet` **and** `FULL_DUE=no` → run its `JIRA_JQL` once with `jira_search` (`limit: 1`). Total `0` → print ONE line `manager: no change (<KEY>, fire <n>)` and **end the pass** — do not run Jobs A–H.
+- Anything else (`LOCAL=changed`, `FULL_DUE=yes`, or the JQL returns ≥ 1) → run the reconcile pass below. Jobs whose trigger did not change may still be skipped (e.g. `INBOX_NEW=0` → Job G/H have no input).
+`FULL_DUE` forces a complete pass every `MANAGER_PRECHECK_FULL_EVERY` fires (default 6 ≈ 1 h at `MANAGER_LOOP`) so Job D's `held` re-checks (`REOPEN_WATCH_DAYS`) and orphan-Done scans still happen. Metric: the share of fires that end at the precheck (count `manager: no change` lines) — target ≥ 70 % on a quiet board.
 
 ## The reconcile pass (one pass per loop fire — then end the pass, the /loop re-fires)
 Promotes the old **Init-5 reconcile** to a first-class mode. Read `.jira-bug/pr-watch.json` at the
@@ -67,7 +73,7 @@ any) and delete the file.
 and for each one **not already represented** in this run's processed set → **Job C**. This is what
 makes KB-backfill reliable independent of watch-file state.
 
-**Then: `auto-fixed`-label scan → Job D** — a read-only `jira_search` for `labels = auto-fixed` (this board/phase) whose ledger `auto_eval` is still `pending` or may have changed → **Job D** (reopen-outcome tracking). Independent of watch-file/Done state.
+**Then: `auto-fixed`-label scan → Job D** — a read-only `jira_search` for `labels = auto-fixed` (this board/phase) whose ledger `auto_eval` is `pending`, or `held` and still inside `REOPEN_WATCH_DAYS` (`references/constants.md`) → **Job D** (reopen-outcome tracking). Independent of watch-file/Done state.
 
 **Then: Jobs E / F / G / H — DEFERRED load.** All four are Discord-related and ledger-driven:
 - **Job E** (deferred-ticket comment watcher) — load if the ledger has `analyzed-deferred` rows for this project+phase.
@@ -75,7 +81,7 @@ makes KB-backfill reliable independent of watch-file state.
 - **Job G** (Discord inbox multipurpose dispatcher) — load if folder `.jira-bug/discord-inbox/` exists AND env `JIRA_BUG_DISCORD_DEFER=1`.
 - **Job H** (user-override completion ack, v1.15.2+) — ALWAYS checked when env `LEARN_APP_DISCORD_BOT_TOKEN` is set: scan `.jira-bug/discord-inbox/*.json` for files WITHOUT `processed_at` that correspond to work parent session already finished this run → POST reply ack to `message_id` → mark + move to `processed/`. Closes the gap for inbox tasks executed outside Job G flow (user ask-reply override, inline execution of `out-of-scope` tasks, etc.).
 
-**Full specs for all three live in `references/helpers/manager-discord-jobs.md`** — load that one file when ANY condition above fires; skip entirely if none do (saves ~5K tokens on a plain Jobs-A-through-D tick).
+**Full specs for all three live in `references/discord/manager-discord-jobs.md`** — load that one file when ANY condition above fires; skip entirely if none do (saves ~5K tokens on a plain Jobs-A-through-D tick).
 
 ## Job A — review-comment handling (interactive; `--auto` auto-applies the clear ones)
 The mechanics live in `references/helpers/pr-merge-watcher.md` ("Review-comment poll" +
@@ -125,13 +131,21 @@ Per Done ticket, dispatch `memory-keeper` (**opus**, `run_in_background: true`) 
 
 ## Job D — auto-fix quality tracking (reopen outcome; unattended, notify-only)
 Fills in the reopen outcome for tickets `--auto` stamped `auto-fixed` (Phase 6) — the quality signal for evaluating the autonomous fixer. Runs every pass, no ask gate; all writes `[BGMEM]`.
-1. **Scan** the board for `JQL: labels = auto-fixed` (optionally scope to this `@N` phase).
-2. **Per auto-fixed ticket, judge the outcome from status history** (not the current status alone):
-   - **Reopened after the auto-fix** (moved back to `Reopened`/`Request`/`In Progress`, or reopened by QA, on a date AFTER the `[AUTO-FIX EVAL]` resolve date) → add label **`auto-fix-reopened`**, update the `[AUTO-FIX EVAL]` comment's `reopen-outcome: reopened <date>` (`[REST]`), set the ledger row `auto_eval: reopened`.
-   - **Held** (still Resolved/Done, or its PR merged, with no reopen) → set ledger `auto_eval: held`; no extra label needed (absence of `auto-fix-reopened` = held).
-   - Already recorded (`auto_eval` is `held`/`reopened`, not `pending`) and unchanged → skip.
-3. **Notify a one-line quality roll-up** for the pass: `auto-fix quality: <total auto-fixed> fixed · <reopened> reopened · reopen-rate <pct>%` — the headline metric for evaluating fix quality. Per newly-changed ticket also: `auto-fix reopened: <KEY>`. **Also roll up `--auto-low` subset separately** so dev can compare: `auto-fix-low quality: <total auto-fix-low> fixed · <reopened> reopened · reopen-rate <pct>%`. If low-conf reopen-rate is materially higher than overall, that is the signal `--auto-low` is too aggressive for this project.
-> Eval queries for the dev anytime: `labels = auto-fixed` (all) vs `labels = auto-fix-reopened` (bad fixes) → overall reopen rate. `labels = auto-fix-low` vs `labels = auto-fix-reopened AND labels = auto-fix-low` → low-conf reopen rate.
+> **v1.15.3 — the status history is the source of truth, never the labels.** On AAP729 (16–22/10/2026) the `auto-fix-reopened` label caught 19 reopens while the Jira status history showed 30–31: a ticket recorded `held` early was never re-checked when QA reopened it days later. Labels are now only a convenience mirror of what this job reads from the changelog.
+1. **Scan** the board for `JQL: labels = auto-fixed` (optionally scope to this `@N` phase), with `expand=changelog` (`[REST]`, `references/helpers/jira-rest-api.md`).
+2. **Per auto-fixed ticket, judge the outcome from the changelog** (not the current status, not the labels):
+   - **Fix time** = when the `auto-fixed` label was added (changelog `labels` item gaining `auto-fixed`); fall back to the first `→ Resolved` after the claim.
+   - **Reopened after the auto-fix** = any status transition AFTER the fix time from `Resolved`/`Closed`/`Reviewing`/`Done` to `Reopened`/`Request`/`In Progress`/`To Do` → add label **`auto-fix-reopened`** if missing, update the `[AUTO-FIX EVAL]` comment's `reopen-outcome: reopened <date>` (`[REST]`), set the ledger row `auto_eval: reopened`, then classify the reason (step 3).
+   - **Held** (no such transition) → ledger `auto_eval: held`. **`held` is NOT final**: re-check every pass until `REOPEN_WATCH_DAYS` (`references/constants.md`) after the fix time; only then mark `held-final` and skip.
+   - Already `reopened` (or `held-final`) → skip.
+3. **Reopen reason (R6) — read before you count.** For each newly reopened ticket, read the comments posted from 1 h before the reopen transition onward (QA explains there) and classify ONE reason: `fix-ineffective` (bug still there) · `regression` (fix broke something else) · `missed-case` (works on the repro path, fails on another state: network, rotation, background, another screen) · `design-mismatch` (behaves right, looks wrong vs Figma) · `requirement-changed` (QA/PO now want something different). Write it to the ledger row (`reopen_reason`, plus a one-line `reopen_note` quoting QA), append it to the `[AUTO-FIX EVAL]` comment, and when the ticket had a `kb_hit` or the fix is app-agnostic, add a `## Pitfalls` line to that `knowledgebase/<category>/<slug>.md` (`[BGMEM]`, memory-keeper `kb-upsert`) so the next analyzer reading it sees the trap. Unclear from the comments → `unknown` (never guess).
+4. **Notify the quality roll-up** for the pass:
+   - `auto-fix quality: <N> fixed · <R> reopened · reopen-rate <pct>% (status history)` and the same line for the `auto-fix-low` subset.
+   - `baseline: non-auto bugs on <PROJECT> reopen-rate <pct>%` — same JQL with `labels != auto-fixed`, same changelog rule (or run `python3 scripts/reopen_report.py --project <KEY>` from the plugin repo, which prints both).
+   - `reasons: fix-ineffective <n> · regression <n> · missed-case <n> · design-mismatch <n> · requirement-changed <n> · unknown <n>`.
+   - Per newly-changed ticket: `auto-fix reopened: <KEY> (<reason>)`.
+5. **Milestone check (R7).** Count auto-fixes with fix time on/after the v1.15.3 install date. Once that count reaches 50: compare the post-v1.15.3 reopen rate with the baseline and print ONE verdict line — `R7: auto reopen <a>% vs baseline <b>% → keep AUTO_SCOPE=ui-only` or `→ eligible: set setup.json autoScope="all" for <PROJECT>`. Never flip `autoScope` yourself; the dev decides.
+> Eval queries for the dev anytime: `labels = auto-fixed AND status WAS Reopened` approximates the reopen count (it also counts a reopen that happened before the auto-fix, so prefer the script). Ledger `reopen_reason` gives the why.
 
 KB stays English; per `[VN]` only dev-facing prompts (none here — Job C asks nothing) are Vietnamese.
 
