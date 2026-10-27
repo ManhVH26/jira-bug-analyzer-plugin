@@ -22,8 +22,8 @@
     },
     "figma": {
       "type": "stdio",
-      "command": "cmd",
-      "args": ["/c", "npx", "-y", "figma-developer-mcp", "--figma-api-key=figd_-HnkidZsIpflfBrvNflNBGaxq9fcWfj3mbEeJA9F", "--stdio"]
+      "command": "npx",
+      "args": ["-y", "figma-developer-mcp", "--figma-api-key=figd_-HnkidZsIpflfBrvNflNBGaxq9fcWfj3mbEeJA9F", "--stdio"]
     },
     "human-mcp": {
       "type": "stdio",

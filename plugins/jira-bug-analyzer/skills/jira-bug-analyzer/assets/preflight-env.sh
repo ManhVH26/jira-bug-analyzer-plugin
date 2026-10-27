@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# lint: no-strict-mode — probe table must always print; never exits non-zero by contract.
 # Read-only env preflight for the jira-bug-analyzer skill.
 # Probes the deps the skill needs and prints a machine-readable status table.
 # NEVER blocks, mutates, or exits non-zero — the model parses the output and decides.

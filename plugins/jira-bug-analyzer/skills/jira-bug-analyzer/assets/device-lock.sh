@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# lint: no-strict-mode — exit codes ARE the API (3 = BUSY/NOTOWNER); -e would abort before the code is returned.
 # device-lock.sh — serialize adb device access across jira-bug-analyzer sessions/projects.
 #
 # Why a script (not prose): every shell call from the agent is a SEPARATE process, so a

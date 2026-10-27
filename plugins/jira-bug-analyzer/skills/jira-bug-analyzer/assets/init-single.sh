@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# lint: no-strict-mode — init must always print INIT-STATUS and exit 0 (set -u only).
 # Single-mode init entry — fix ONE ticket by key. Sources the shared core and
 # emits a single-tailored INIT-STATUS (no BOARD/PULLQUERY/TEAM — single doesn't pull).
 # Behavior table: references/phase1-init-single-mode.md

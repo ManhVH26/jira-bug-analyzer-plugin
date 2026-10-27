@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# lint: no-strict-mode — read subcommands always exit 0 and print one status line; push reports failure itself.
 # Shared-memory sync helper for the jira-bug-analyzer skill.
 # Runs under Git Bash on Windows or any POSIX sh. Read-mostly; mutations are git commits.
 #

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# lint: no-strict-mode — init must always print INIT-STATUS and exit 0 (set -u only).
 # Team-mode (launcher) init entry — this session becomes MainCharacter and stands
 # up the jira-bugfix Agent Team. Sources the shared core; emits BOARD/PULLQUERY/TEAM
 # plus TEAM_FLAG (a hint for the CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS env flag; the
