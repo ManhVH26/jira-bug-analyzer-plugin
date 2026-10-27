@@ -1,5 +1,12 @@
 # Init phase — Multi mode (solo worker, no team)
 
+## Must-do checklist (read this even if you skim the rest)
+Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
+- [ ] `bash <skill-dir>/assets/init-multi.sh "<repo root>" --project <BOARD>`; `PULL_NOW=yes` → fire `jira_search` first (`references/warm-fast-path.md`).
+- [ ] `MEMORY_CLONE=present` (else `memory-sync.sh autowire`); `BASEBRANCH=none` → ask this turn, save local + shared.
+- [ ] Keep `BUILD_CMD` / `APK_GLOB` / `AUTO_SCOPE`; under `--auto` apply `references/helpers/auto-ticket-pick.md` (skips once-deferred tickets).
+- [ ] After the pick: Phase 2 §2.0 discovery, then the turn loop in `references/multi-turn-loop.md`.
+
 > Loaded by SKILL.md's mode dispatch when the invocation resolves to **multi** with NO `--team` (`--mode multi`, the `pull`/`batch` aliases, or the default when no mode/ticket is given). This is the **solo worker**: pull the board → list bugs by category → dev picks → fix the set in fan-out, each ticket reviewed + merged the moment it is green (no windowed rounds) → re-pull next turn. Self-contained: the **Pull & list by category** block lives HERE (the canonical copy — the phase4 re-pull and the team file both point back to it). When you reach the workflow read `references/multi-turn-loop.md` (the turn loop) and `references/phase4-fix-and-build.md` (fixers; analyze fan-out is in `references/phase3-analyze.md`); the **Source-of-truth capture** is Phase 2 (`references/phase2-source-of-truth.md` — background, non-blocking), other shared gates live in `references/run-blocks.md`. Cross-cutting invariants are SKILL.md **Golden Rules** — cited by tag, not restated.
 
 ## Init-1…5 — one script, then act on the result

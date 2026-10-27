@@ -1,5 +1,13 @@
 # Phase 5 — Verify (review diff on GitHub → build/install → user-verify → PR; `--auto` self-verify via the `android-self-verify` skill)
 
+## Must-do checklist (read this even if you skim the rest)
+Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
+- [ ] Gate 1: show the diff (GitHub webview; `--auto`: `code-reviewer`, `model: sonnet`).
+- [ ] Device ONLY through the lock: `SERIAL=$(bash <skill-dir>/assets/device-lock.sh free-serial "<session-id>" 1800)` → `bash <skill-dir>/assets/device-lock.sh install "$SERIAL" "<session-id>" <apk>`. A bare `adb install` / `adb -s … install` is a bug.
+- [ ] Verifier subagent (`model: sonnet`); evidence saved under `.jira-bug/evidence/<TICKET>/` (behavioral: state-change scenarios too).
+- [ ] `--auto` + behavioral + no device → defer `no-device` (no PR).
+- [ ] `bash <skill-dir>/assets/device-lock.sh release "$SERIAL" "<session-id>"` when done.
+
 > The flow's fifth phase: **Intake (phase1) → Source-of-truth (phase2) → Analyze (phase3) → Fix + build (phase4) → Verify (THIS phase) → Commit & PR (phase6).** A fix arrives here **already compiled AND built into an APK in its worktree** (Phase 4 Fix-12 ran `<BUILD_CMD>`). This phase: (1) shows the **code change in the GitHub webview** for the dev to review, (2) on no-change, **installs the APK Phase 4 already built** and gets the human verify, (3) on user-verify pass, hands to **Phase 6** to open the PR + attach it to Jira + move the ticket to Resolved. **Self-verify: for a UI-scoped ticket the design-anchored `android-ui-verify` (device ⟷ Figma 4-axis diff + blast-radius sweep) is MANDATORY on the verify gate — interactive AND `--auto` — and may NOT be reduced to a "looks present / compiled" smoke-check; the behavioral `android-self-verify` runs ONLY under `--auto`. Both drive via screenshot-observed `adb` — not mobile-mcp.** Invariants are SKILL.md Golden Rules (`[VERIFY]` `[1COMMIT]` `[VN]` `[OPTIONS]` `[REST]`). Shared blocks (PR round, watcher, device-lock, Base branch) live in `references/run-blocks.md` / `references/helpers/`.
 
 ## Entry contract

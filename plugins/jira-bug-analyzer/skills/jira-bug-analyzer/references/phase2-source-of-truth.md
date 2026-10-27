@@ -1,5 +1,10 @@
 # Phase 2 — Source-of-truth capture (per project + phase, background / non-blocking)
 
+## Must-do checklist (read this even if you skim the rest)
+Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
+- [ ] Resolve spec/figma with the §2.0 ladder (`references/helpers/source-of-truth-discovery.md`) — interactive: one-tap confirm; `--auto`: self-verify, else defer `no-sot`.
+- [ ] Launch the capture in the background; never wait for it before Phase 3.
+
 > The flow's second phase: **Intake (phase1) → Source-of-truth capture (THIS phase) → Analyze (phase3) → Fix (phase4).** Runs once per project+phase. It captures the **FULL project+phase ground truth** (Confluence spec, Figma, external-link content) into the shared memory repo — **phase-scoped, independent of which tickets were picked**, so the one capture serves every ticket in the phase and fixes match intended design, not just suppress the symptom (supersedes the old per-repo `CLAUDE.md` gate). **This is no longer a blocking gate.** The only synchronous step is **discovery (§2.0)** — which resolves the spec/figma links **automatically** in the common case and asks the dev **only** when detection comes back fuzzy or empty; the capture/digest itself runs in the **background** while Analyze (phase3) proceeds. Shared machinery it leans on lives in `references/run-blocks.md`; the memory mechanics + file schemas live in `references/helpers/memory.md`. Cross-cutting invariants are SKILL.md **Golden Rules** — cited by tag, not restated.
 
 ## When it runs — discover synchronously, capture in the background

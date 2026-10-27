@@ -19,3 +19,4 @@ Những quy tắc này do LLM thực thi nên không có unit test. Chạy mỗi
 | 13 | P7 | Board không có thay đổi | `--manager`, chờ 2 lượt | Lượt 2 in `manager: no change …` và dừng |
 | 14 | P4 | 5 lệnh: `KEY-123`, `KEY`, `KEY @3 --auto`, `--manager KEY`, `--team KEY` | — | Mỗi lệnh đọc đúng file phase 1, tới cổng đầu tiên không hỏi thừa |
 | 15 | Job D | Ticket sửa ở single mode (có dòng ledger `pr-created`), QA reopen rồi sau đó Close | `--manager` sau mỗi lần đổi trạng thái | Ledger chuyển `reopened` (kèm `reopen_reason`), sau đó `done`; báo cáo có dòng `interactive fixes: …` tách khỏi số auto |
+| 16 | Checklist | Bất kỳ lần chạy single/multi nào | — | Báo cáo cuối liệt kê từng mục checklist Phase 3–6 kèm bằng chứng: `LEDGER_COMMIT=` (analyzed + pr-created), serial máy đã khoá, PR url, worklog, mục `pr-watch.json` |

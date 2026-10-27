@@ -84,7 +84,7 @@ Khi fix flow defer một ticket (`auto-plan-pick.md` → "Khi defer"), ticket v�
 Resume + Review cùng khớp → ưu tiên **Review** (an toàn hơn, dev vẫn có thể reply thêm `@claude fix` nếu đổi ý).
 
 ### Resume branch
-1. **Xoá ledger row** `analyzed-deferred` cho ticket (`[BGMEM]`).
+1. **Xoá ledger row** `analyzed-deferred` cho ticket: `bash <skill-dir>/assets/ledger.sh delete <PROJ> <PHASE> <KEY>` (in `LEDGER_COMMIT=`).
 2. **Ghi `.jira-bug/clarify-<KEY>.md`** với nguyên văn comment body (Phase 3 Fix-5 Clarify sẽ đọc như clarify answer).
 3. **Dispatch Phase 3 (re-analyze) cho ticket đó — KHÔNG tự fix, cả `--manager` lẫn `--manager --auto`** (v1.15.3: ticket từng defer bị reopen 8/8 khi tự fix):
    - Phase 3 re-score với clarify-file. Clarify-file không trả lời được câu hỏi đã defer (`clarify-gap` / `qa-info-needed` / `needs-po-clarification` vẫn mở) → defer lại với reason mới + Jira comment `[VN]` hỏi đúng phần còn thiếu (ledger row mới, `commentsCursor` cũ KHÔNG kế thừa — ticket deferred lần này là context mới).

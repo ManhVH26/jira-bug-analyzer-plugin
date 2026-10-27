@@ -147,6 +147,25 @@ def check_agent_model(skill, md, r):
     r.metrics["agent_spawns_without_model"] = n
 
 
+def check_phase_checklists(skill, md, r):
+    """Every phase file opens with a must-do checklist (runs skim files with head/grep), and ledger
+    writes are commands (assets/ledger.sh), never prose asking a memory-keeper to do it."""
+    missing, prose = 0, 0
+    for path, text in md.items():
+        p = rel(path, skill)
+        if os.path.basename(p).startswith("phase") and os.path.dirname(p) == "references":
+            if "## Must-do checklist" not in "\n".join(text.splitlines()[:6]):
+                missing += 1
+                r.err("checklist", f"{p} must open with '## Must-do checklist' (within its first 6 lines)")
+        for i, line in enumerate(text.splitlines(), 1):
+            if "memory-keeper" in line and "record_bug_status" in line and "ledger.sh" not in line \
+                    and not p.startswith("references/helpers/memory.md"):
+                prose += 1
+                r.err("ledger-prose", f"{p}:{i} asks memory-keeper to write record_bug_status.md — use assets/ledger.sh")
+    r.metrics["phase_files_without_checklist"] = missing
+    r.metrics["ledger_writes_as_prose"] = prose
+
+
 def check_versions(root, r):
     try:
         pv = json.loads(read(os.path.join(root, PLUGIN_JSON_REL)))["version"]
@@ -249,7 +268,7 @@ def main():
     r.metrics["skill_total_bytes"] = sum(len(t.encode()) for t in allf.values())
     for fn in (lambda: check_tags(skill, md, r), lambda: check_refs(skill, md, r), lambda: check_removed_flags(skill, md, r),
                lambda: check_constant_copies(skill, allf, r), lambda: check_build_cmd(skill, allf, r),
-               lambda: check_agent_model(skill, md, r), lambda: check_versions(root, r), lambda: check_size(skill, r),
+               lambda: check_agent_model(skill, md, r), lambda: check_phase_checklists(skill, md, r), lambda: check_versions(root, r), lambda: check_size(skill, r),
                lambda: check_shell(root, skill, r), lambda: check_secrets(root, r), lambda: check_discord_in_core(skill, r)):
         fn()
     r.metrics["lint_errors"], r.metrics["lint_warnings"] = len(r.errors), len(r.warnings)

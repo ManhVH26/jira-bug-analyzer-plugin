@@ -60,6 +60,34 @@ check "setup-mcp names the missing executable" "MISSING_BIN=mcp-atlassian" "$out
 out="$(HOME="$HB" PATH="/usr/bin:/bin" bash "$ASSETS/preflight-env.sh" --now-only "$TMP" 2>&1)"
 check "preflight blocks on the missing executable" "DEP=jira-mcp-bin TIER=now STATUS=missing" "$out"
 
+echo "ledger.sh — the only writer of record_bug_status.md"
+LH="$TMP/lhome"; git init -q --bare "$TMP/mem.git"; git clone -q "$TMP/mem.git" "$LH/.claude/jira-bug-memory" 2>/dev/null
+LC="$LH/.claude/jira-bug-memory"; git -C "$LC" config user.email t@t; git -C "$LC" config user.name t
+mkdir -p "$LC/project/P/ph/session" "$LC/project/Q/ph/session" "$LC/project/R/ph/session"
+printf '# P\n\n## P-1\n- status: analyzed\n- dev: a\n' > "$LC/project/P/ph/session/record_bug_status.md"
+printf '| ticket | dev | status | summary |\n|---|---|---|---|\n| Q-1 | a | done | x \\| y |\n| Q-2 | b | done | z |\n' > "$LC/project/Q/ph/session/record_bug_status.md"
+printf 'free notes\n' > "$LC/project/R/ph/session/record_bug_status.md"
+git -C "$LC" add -A && git -C "$LC" commit -qm init && git -C "$LC" push -q origin HEAD 2>/dev/null
+LG() { HOME="$LH" bash "$ASSETS/ledger.sh" "$@"; }
+check "new file: creates the canonical table and pushes" "LEDGER_COMMIT=" "$(LG upsert N ph N-1 status=analyzed dev=me 'summary=a | b')"
+check "new file: pipe in a value is escaped" '| N-1 | analyzed |  | me | a \| b |' "$(cat "$LC/project/N/ph/session/record_bug_status.md")"
+LG upsert P ph P-1 status=pr-created pr=u >/dev/null; LG upsert P ph P-2 status=analyzed >/dev/null
+out="$(cat "$LC/project/P/ph/session/record_bug_status.md")"
+check "sections: updates the ticket's block" "- status: pr-created" "$out"
+check "sections: adds a new ticket block, keeps the old one" "## P-2" "$out"
+check "sections: other fields kept" "- dev: a" "$out"
+LG upsert Q ph Q-1 status=reopened reopen_reason=missed-case >/dev/null
+out="$(cat "$LC/project/Q/ph/session/record_bug_status.md")"
+check "table: new column appended, row updated" "| Q-1 | a | reopened | x \\| y | missed-case |" "$out"
+check "table: other rows untouched (only empty cells added)" "| Q-2 | b | done | z | | |" "$out"
+check "get prints the row" "LEDGER_ROW=| Q-1" "$(LG get Q ph Q-1)"
+LG delete Q ph Q-2 >/dev/null
+case "$(cat "$LC/project/Q/ph/session/record_bug_status.md")" in *Q-2*) bad "delete removes the row" ;; *) ok "delete removes the row" ;; esac
+out="$(LG upsert R ph R-1 status=analyzed 2>&1 || true)"
+check "unreadable file is never overwritten" "LEDGER_ERROR=unrecognised" "$out"
+check "unreadable file left as it was" "free notes" "$(cat "$LC/project/R/ph/session/record_bug_status.md")"
+check "every write reached the remote" "ledger Q-2 delete" "$(git --git-dir="$TMP/mem.git" log --oneline -1)"
+
 echo "setup-json merge keeps JSON valid"
 S="$TMP/s.json"; printf '{\n  "board": "X"\n}\n' > "$S"
 bash "$ASSETS/setup-json.sh" merge-set "$S" buildCmd="./gradlew assembleDebug" >/dev/null

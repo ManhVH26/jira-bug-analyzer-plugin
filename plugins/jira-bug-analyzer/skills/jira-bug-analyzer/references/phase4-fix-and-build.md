@@ -1,5 +1,11 @@
 # Phase 4 — Fix workflow (worktree → fix by the plan → build app to verify compilation)
 
+## Must-do checklist (read this even if you skim the rest)
+Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
+- [ ] `git fetch` then a worktree from `origin/<BASE>` — never edit the main checkout.
+- [ ] Change only what the approved plan says (`references/helpers/fix-code-rules.md` R1–R22).
+- [ ] `<BUILD_CMD>` green before Phase 5; quote the build result.
+
 > The flow's fourth phase: **Intake (phase1) → Source-of-truth capture (phase2, background) → Analyze (phase3) → Fix (THIS phase).** It starts from an **approved plan** (Phase 3 Fix-8), fixes by that plan in an isolated worktree, and **builds the app (`<BUILD_CMD>`) to verify it compiles** — a green build is Phase 4's done gate. Verify-on-device / PR / Jira are NOT in this phase (Phase 5 + Phase 6). The **analyze** steps (claim → fetch → media → root-cause + plan → clarify → approval) live in `references/phase3-analyze.md`. The other named blocks (Post-analysis dedup · In-Progress lock · Pre-fix context · Fix worktree · Multi fan-out · Post-fix gates · PR round · PR watcher) live in `references/run-blocks.md` — keep it loaded. The **Pull & list by category** block lives in `references/phase1-init-multi-mode-without-team.md` (re-pulls reuse it). Invariants are SKILL.md Golden Rules (`[CLAIM]` `[VERIFY]` `[1COMMIT]` `[VN]` `[OPTIONS]` `[REST]`). SOT ground truth is resolved via the **Context-source rule** in `references/phase3-analyze.md` (memory if ready, else the dev's provided refs — never block on the background capture).
 
 ## What Phase 4 needs to do (exactly)

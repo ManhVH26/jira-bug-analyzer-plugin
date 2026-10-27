@@ -1,5 +1,13 @@
 # Init phase — Single mode (fix ONE ticket by key)
 
+## Must-do checklist (read this even if you skim the rest)
+Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
+- [ ] `bash <skill-dir>/assets/init-single.sh "<repo root>" --project <BOARD>` — act on every INIT-STATUS line; `ENV=block:*` / a `TIER=now` dep missing → stop and fix (`references/helpers/environment-setup.md`).
+- [ ] `MEMORY_CLONE=present` (else `bash <skill-dir>/assets/memory-sync.sh autowire`) — without it no ledger write can happen later.
+- [ ] `BASEBRANCH=none` → ask now and save to local + shared `setup.json`.
+- [ ] Keep `BUILD_CMD` / `APK_GLOB` / `AUTO_SCOPE` from INIT-STATUS for Phases 3–5.
+- [ ] Next: Phase 2 §2.0 discovery (`references/helpers/source-of-truth-discovery.md`) BEFORE the claim.
+
 > Loaded by SKILL.md's mode dispatch when the invocation resolves to **single** (`--mode single <KEY>` or a bare `[A-Z][A-Z0-9]+-\d+` token). Self-contained: everything single needs is here — no board pull, no category listing. When you reach analyze read `references/phase3-analyze.md` (Single Fix-1…Fix-8) and for the fix read `references/phase4-fix-and-build.md` (Fix-9…Fix-13); the **Source-of-truth capture** is Phase 2 (`references/phase2-source-of-truth.md` — background, non-blocking), other shared gates live in `references/run-blocks.md`. Cross-cutting invariants are SKILL.md **Golden Rules** — cited by tag, not restated.
 
 Single mode fixes **one** ticket. The key comes from the arg (`--mode single AIP686-179` or bare `AIP686-179`); if absent, ask for it `[OPTIONS]`/free-text before anything else.

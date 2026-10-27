@@ -1,5 +1,10 @@
 # Init phase — Multi mode WITH team (`--team` launcher → MainCharacter)
 
+## Must-do checklist (read this even if you skim the rest)
+Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
+- [ ] `bash <skill-dir>/assets/init-team.sh "<repo root>" --project <BOARD>`; same INIT-STATUS handling as the solo multi file.
+- [ ] Load `team/team.md`; every Dev follows the Phase 3–6 checklists (ledger writes included) — the lead verifies each `LEDGER_COMMIT=`.
+
 > Loaded by SKILL.md's mode dispatch when the invocation contains **`--team`** (with or without `--mode multi`). This session becomes **MainCharacter** (the team lead) and stands up the parallel `jira-bugfix` Agent Team — it does NOT run the solo worker flow. Self-contained for launch; the role cards + full launch recipe live at `team/team.md` (loaded at spawn). The board pull + bug listing reuse the canonical **Pull & list by category** block in `references/phase1-init-multi-mode-without-team.md` (NOT phase2). Cross-cutting invariants are SKILL.md **Golden Rules** — cited by tag, not restated.
 
 `/jira-bug-analyzer --team [--mode multi] [--devs N]` turns **this** session into the lead. The plain command is the *worker*; `--team` is the *launcher*. Spawned teammates run their slices **without** `--team` (Devs run the truncated single flow per their role card).
