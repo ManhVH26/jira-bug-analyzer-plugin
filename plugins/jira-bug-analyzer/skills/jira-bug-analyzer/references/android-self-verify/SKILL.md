@@ -35,7 +35,7 @@ This verification **always runs** when invoked. You may NOT skip or shortcut it 
 > LOCK=<jira-bug-analyzer-skill-dir>/assets/device-lock.sh
 > bash "$LOCK" exec <serial> <owner-token> -- <adb args>   # e.g. -- exec-out screencap -p > shot.png
 > ```
-> A bare `adb -s <serial> …` bypasses the lock and lets a second terminal drive the same device — its screen then lands in YOUR evidence. `NOTOWNER` (exit 3) → stop and report `blocked`; never mint your own token, never fall back to raw adb. Standalone (no `--owner-token` given, no lock in play) → plain `adb -s` is fine.
+> A bare `adb -s <serial> …` bypasses the lock and lets a second terminal drive the same device — its screen then lands in YOUR evidence. `NOTOWNER` (exit 3) → stop and report `blocked`; never mint your own token, never fall back to raw adb. Standalone use outside jira-bug-analyzer (no `--owner-token`, no lock in play) → plain `adb -s` is fine. **Dispatched by jira-bug-analyzer without a token → stop and report `blocked: no owner token`** — the parent skipped the lock (AAP857-112), never drive unlocked.
 
 > **Reach the state the bug needs by the SHORTEST path — and give up fast when stuck (AIP396-475: 11 min, 92 commands, 96 sleeps, never reached the state).**
 > - **Look before acting:** dump the current screen first; the state you need (a saved word, a locked lesson, a filled list) may already exist.

@@ -2,6 +2,8 @@
 
 Read this when fetching attachments, posting comments/worklogs, or transitioning status. SKILL.md tells you *when* and *what rule* applies; this file is the *how* (exact calls).
 
+> **Use `assets/jira.sh` (`claim`, `finalize`) for the Phase 3 claim and the Phase 6 writes** — it wraps the calls below and reads each result back. The snippets here are for anything else.
+
 ## MCP / REST split — read first
 
 The local `jira` MCP exposes only the toolsets in `.mcp.json` (typically `jira_issues,jira_search,jira_projects,jira_boards,jira_sprints`). It does **NOT** cover:

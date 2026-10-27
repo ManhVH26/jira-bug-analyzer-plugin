@@ -109,6 +109,25 @@ check "a missing task is reported with candidates" "BUILD_TASK=missing TASK=asse
 check "no gradlew is unknown, not a failure" "BUILD_TASK=unknown" "$(bash "$ASSETS/build-task-check.sh" "$TMP" "./gradlew x")"
 check "init says where BUILD_CMD came from" "BUILD_CMD_SOURCE=default" "$(HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$TMP/bt" 2>&1)"
 
+echo "jira.sh — Phase 6 Jira writes as one command (local mock of Jira Server)"
+JM="$TMP/jm"; mkdir -p "$JM/ev"; python3 "$REPO/tests/jira_mock.py" "$JM/port" "$JM/log" & JPID=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$JM/port" ] && break; sleep 0.3; done
+printf '\x89PNG\r\n\x1a\nfake' > "$JM/ev/verify-after.png"; printf 'x' > "$JM/ev/notes.txt"
+printf '**Đã sửa:** icon của chip dùng `ic_tool_video`.\n' > "$JM/body.txt"
+JENV() { HOME="$TMP/jhome" JIRA_URL="http://127.0.0.1:$(cat "$JM/port")" JIRA_PERSONAL_TOKEN=t "$@"; }
+out="$(JENV bash "$ASSETS/jira.sh" finalize T-1 "$JM/body.txt" "$JM/ev" --pr https://github.com/o/r/pull/5 2>&1 || true)"
+check "finalize attaches only repro/verify media" "JIRA_ATTACHED=1/1" "$out"
+check "finalize embeds the evidence in the comment" "EMBED=ok" "$out"
+check "finalize moves the ticket to Resolved" "JIRA_STATUS=Resolved" "$out"
+check "finalize logs work" "JIRA_WORKLOG=91 TIME=30m" "$out"
+check "finalize reports success only when every step landed" "FINALIZE=ok" "$out"
+log="$(cat "$JM/log")"
+check "markdown bold becomes wiki bold" '*\\u0110\\u00e3 s\\u1eeda:*' "$log"
+check "markdown code becomes wiki monospace" "{{ic_tool_video}}" "$log"
+case "$log" in *"attachments"*"/comment "*) ok "attach happens before the comment" ;; *) bad "attach happens before the comment" ;; esac
+check "claim reports status and assignee" "JIRA_STATUS=In Progress JIRA_ASSIGNEE=dev1" "$(JENV bash "$ASSETS/jira.sh" claim T-1 2>&1 || true)"
+kill "$JPID" 2>/dev/null; wait "$JPID" 2>/dev/null || true
+
 echo "fetch-media-links.sh — screenshot share links become files (offline, file:// fixtures)"
 FM="$TMP/fml"; mkdir -p "$FM/site"
 python3 - "$FM/site/shot.png" <<'PY'

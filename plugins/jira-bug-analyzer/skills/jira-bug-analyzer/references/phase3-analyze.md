@@ -2,7 +2,7 @@
 
 ## Must-do checklist (read this even if you skim the rest)
 Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
-- [ ] Claim `[CLAIM]`: transition → In Progress + assign to you, then `bash <skill-dir>/assets/ledger.sh upsert <PROJ> <PHASE> <TICKET> status=analyzing dev=<jira-user>`.
+- [ ] Claim `[CLAIM]` BEFORE reading code: `bash <skill-dir>/assets/jira.sh claim <TICKET>` (→ `JIRA_STATUS=In Progress JIRA_ASSIGNEE=…`), then `bash <skill-dir>/assets/ledger.sh upsert <PROJ> <PHASE> <TICKET> status=analyzing dev=<jira-user>`.
 - [ ] Analyzer = subagent with `model: opus` (Fix-3 → Fix-6). Media = Jira attachments **plus** links in the description/comments: `bash <skill-dir>/assets/fetch-media-links.sh fetch <text> .jira-bug/media/<TICKET>/` (prnt.sc & other share pages → real image/video); analyze each via human-mcp.
 - [ ] After the analysis: `bash <skill-dir>/assets/ledger.sh upsert <PROJ> <PHASE> <TICKET> status=analyzed root_cause_slug=<slug> "summary=<one line>" files=<file:line;…>` → quote `LEDGER_COMMIT=`.
 - [ ] Dedup: `bash <skill-dir>/assets/ledger.sh get …` + the cross-phase scan (`references/run-blocks.md`) before planning.

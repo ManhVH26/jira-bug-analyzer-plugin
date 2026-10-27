@@ -29,10 +29,10 @@ Pipeline: select mode → gather context (board, ticket) → **auto-discover spe
 | Errors | `references/helpers/troubleshooting.md` |
 
 **Entering a phase = `head -12` of its file first** (its Must-do checklist), every run, even when the flow feels familiar. AAP857-113 read only phase1 and phase6 and so skipped the claim, the `analyzed` ledger row, Gate 1, the device lock and the pr-watch entry. The commands no run may drop:
-- Phase 3: claim (In Progress + `ledger.sh … status=analyzing`) BEFORE analyzing; `status=analyzed` after.
+- Phase 3: claim (`assets/jira.sh claim` + `ledger.sh … status=analyzing`) BEFORE analyzing; `status=analyzed` after.
 - Phase 4: `BUILD_CMD_SOURCE=default` → `assets/build-task-check.sh` before the first build; save the answer.
-- Phase 5: Gate 1 diff shown to the dev BEFORE any install; device only via `assets/device-lock.sh` (main session AND verifier brief).
-- Phase 6: `ledger.sh … status=pr-created pr=<url>` from the project root — it also writes `.jira-bug/pr-watch.json`.
+- Phase 5: Gate 1 diff shown to the dev BEFORE any install; device only via `assets/device-lock.sh`; the verifier gets `references/helpers/verifier-brief.md` filled in (serial + owner token), never a hand-written brief.
+- Phase 6: `assets/jira.sh finalize … --ledger …` — evidence embedded, Resolved, worklog, ledger `pr-created` and pr-watch in one command.
 
 ## Reference files (read when)
 
