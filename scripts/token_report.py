@@ -8,6 +8,7 @@ skill, before and after a change, over the same kind of work.
 Usage:
   python3 scripts/token_report.py                       # all time
   python3 scripts/token_report.py --since 2026-10-28    # only runs on/after a date
+  python3 scripts/token_report.py --until 2026-10-28    # baseline: runs before a date
   python3 scripts/token_report.py --skill learn-app     # any other skill, same report
   python3 scripts/token_report.py --json
 """
@@ -35,14 +36,18 @@ def iter_messages(path):
             yield d, m
 
 
-def report(root, skill, since):
+def in_window(ts, since, until):
+    return (not since or ts >= since) and (not until or ts < until)
+
+
+def report(root, skill, since, until=None):
     by_model = defaultdict(lambda: defaultdict(int))
     sessions = 0
     for main in glob.glob(os.path.join(root, "*", "*.jsonl")):
         hit = False
         rows = list(iter_messages(main))
         for d, _ in rows:
-            if skill in (d.get("attributionSkill") or "") and (not since or d.get("timestamp", "") >= since):
+            if skill in (d.get("attributionSkill") or "") and in_window(d.get("timestamp", ""), since, until):
                 hit = True
                 break
         if not hit:
@@ -51,7 +56,7 @@ def report(root, skill, since):
         files = [(main, True)] + [(p, False) for p in glob.glob(os.path.join(main[:-6], "subagents", "*.jsonl"))]
         for path, is_main in files:
             for d, m in (rows if is_main else iter_messages(path)):
-                if since and d.get("timestamp", "") < since:
+                if not in_window(d.get("timestamp", ""), since, until):
                     continue
                 if is_main and skill not in (d.get("attributionSkill") or ""):
                     continue
@@ -68,17 +73,23 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.path.expanduser("~/.claude/projects"))
     ap.add_argument("--skill", default="jira-bug-analyzer")
-    ap.add_argument("--since", help="YYYY-MM-DD")
+    ap.add_argument("--since", help="YYYY-MM-DD (inclusive)")
+    ap.add_argument("--until", help="YYYY-MM-DD (exclusive) — e.g. the install day, for a before/after baseline")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
-    sessions, by_model = report(a.root, a.skill, a.since)
+    sessions, by_model = report(a.root, a.skill, a.since, a.until)
     if a.json:
-        print(json.dumps({"skill": a.skill, "since": a.since, "sessions": sessions, "by_model": by_model}, indent=2))
+        print(json.dumps({"skill": a.skill, "since": a.since, "until": a.until, "sessions": sessions, "by_model": by_model}, indent=2))
         return
-    print(f"Token report — skill '{a.skill}'" + (f" since {a.since}" if a.since else "") + f" — {sessions} session(s)")
+    window = (f" since {a.since}" if a.since else "") + (f" until {a.until}" if a.until else "")
+    print(f"Token report — skill '{a.skill}'{window} — {sessions} session(s)")
     print(f"{'model':<28}{'msgs':>7}{'(sub)':>7}{'input':>12}{'cache-write':>14}{'cache-read':>14}{'output':>12}")
     for model, b in sorted(by_model.items(), key=lambda kv: -kv[1]["output_tokens"]):
         print(f"{model:<28}{b['messages']:>7}{b['from_subagents']:>7}{b['input_tokens']:>12,}{b['cache_creation_input_tokens']:>14,}{b['cache_read_input_tokens']:>14,}{b['output_tokens']:>12,}")
+    if sessions:  # compare before/after on the per-session average, not the totals (session counts differ)
+        for k in ("output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+            total = sum(b[k] for b in by_model.values())
+            print(f"per session {k:<28}{total // sessions:>14,}")
 
 
 if __name__ == "__main__":

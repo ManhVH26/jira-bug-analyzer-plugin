@@ -41,12 +41,13 @@ Lưu ý thống kê: chênh lệch 30 % so với 16 % ở baseline có p ≈ 0,0
 
 ## 3. Quy trình đánh giá sau khi fix bug thật
 
-1. Ghi lại **ngày cài v1.15.3** (`--since`).
+1. Ghi lại **ngày cài v1.15.3** (`--since` / `--until`). Board có nhiều dev dùng version khác nhau → lọc bằng `--by <jira-username>` (người đã gắn nhãn `auto-fixed`, không phải assignee hiện tại — QA hay đổi assignee khi reopen).
 2. Chạy lô bug thật như bình thường (single / multi / `--auto`), rồi `--manager` để Job D theo dõi reopen.
 3. Sau mỗi tuần, hoặc khi đủ 50 ticket auto mới:
    ```bash
-   JIRA_PERSONAL_TOKEN=... python3 scripts/reopen_report.py --project AAP729 --since 2026-10-28
-   python3 scripts/token_report.py --since 2026-10-28      # trên máy đã chạy skill
+   JIRA_PERSONAL_TOKEN=... python3 scripts/reopen_report.py --project AIP396 --since 2026-10-28 --by <jira-username>
+   python3 scripts/token_report.py --until 2026-10-28      # baseline (trước khi cài), trên máy đã chạy skill
+   python3 scripts/token_report.py --since 2026-10-28      # sau khi cài — so dòng "per session", không so tổng
    ```
 4. So với bảng mục 2. Đạt mục tiêu R thì mới cân nhắc `autoScope: "all"` cho project đó.
 5. Các kịch bản hành vi cần kiểm bằng tay trước khi tin vào số liệu: `tests/SCENARIOS.md`.

@@ -7,6 +7,7 @@ number here comes from the changelog.
 Usage:
   JIRA_PERSONAL_TOKEN=... python3 scripts/reopen_report.py --project AAP729
   python3 scripts/reopen_report.py --project AAP729 --since 2026-10-28   # only auto-fixes made on/after
+  python3 scripts/reopen_report.py --project AIP396 --since 2026-10-28 --by vuhoangmanh   # only my auto-fixes
   python3 scripts/reopen_report.py --project AAP729 --json
 
 Env: JIRA_URL (default https://jira.apero.vn), JIRA_PERSONAL_TOKEN (Bearer PAT, same one the Jira MCP uses).
@@ -28,15 +29,29 @@ def histories(issue):
     return sorted(issue.get("changelog", {}).get("histories", []), key=lambda h: h["created"])
 
 
-def fix_time(issue, auto):
-    """When the fix landed: the `auto-fixed` label for auto tickets, else the first move into a done status."""
+def author(h):
+    a = h.get("author") or {}
+    return a.get("name") or a.get("key") or a.get("accountId") or ""
+
+
+def auto_fix_entry(issue):
+    """The changelog entry that added the `auto-fixed` label (None if absent)."""
     for h in histories(issue):
         for it in h.get("items", []):
-            if auto and it.get("field") == "labels":
+            if it.get("field") == "labels":
                 before = set((it.get("fromString") or "").split())
                 after = set((it.get("toString") or "").split())
                 if "auto-fixed" in after and "auto-fixed" not in before:
-                    return parse_time(h["created"])
+                    return h
+    return None
+
+
+def fix_time(issue, auto):
+    """When the fix landed: the `auto-fixed` label for auto tickets, else the first move into a done status."""
+    if auto:
+        h = auto_fix_entry(issue)
+        if h:
+            return parse_time(h["created"])
     for h in histories(issue):
         for it in h.get("items", []):
             if it.get("field") == "status" and (it.get("toString") or "").lower() in DONE:
@@ -57,9 +72,15 @@ def reopened_after(issue, t0):
     return None
 
 
-def classify(issues, auto, since=None):
+def classify(issues, auto, since=None, by=None):
+    """by: keep only auto-fixes whose `auto-fixed` label was added by this Jira user (the dev who ran the skill).
+    Filtering on the current assignee would drop reopened tickets that QA reassigned."""
     rows = []
     for iss in issues:
+        if auto and by:
+            h = auto_fix_entry(iss)
+            if not h or author(h) != by:
+                continue
         t0 = fix_time(iss, auto)
         if t0 is None or (since and t0 < since):
             continue
@@ -125,6 +146,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--project", required=True)
     ap.add_argument("--since", help="only auto-fixes made on/after this date (YYYY-MM-DD), e.g. the v1.15.3 install day")
+    ap.add_argument("--by", help="only auto-fixes labelled by this Jira username (separates devs / plugin versions on one board)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
     token = os.environ.get("JIRA_PERSONAL_TOKEN")
@@ -132,13 +154,13 @@ def main():
         sys.exit("JIRA_PERSONAL_TOKEN is not set")
     url = os.environ.get("JIRA_URL", "https://jira.apero.vn")
     since = parse_time(a.since + "T00:00:00") if a.since else None
-    auto_rows = classify(jira_search(url, token, f'project = {a.project} AND labels = "auto-fixed"'), True, since)
+    auto_rows = classify(jira_search(url, token, f'project = {a.project} AND labels = "auto-fixed"'), True, since, a.by)
     base_rows = classify(jira_search(url, token, f'project = {a.project} AND issuetype = Bug AND (labels is EMPTY OR labels not in ("auto-fixed")) AND statusCategory = Done'), False, since)
     s = summarize(auto_rows, base_rows)
     if a.json:
-        print(json.dumps({"project": a.project, "since": a.since, **s}, indent=2))
+        print(json.dumps({"project": a.project, "since": a.since, "by": a.by, **s}, indent=2))
         return
-    print(f"Reopen report — {a.project}" + (f" (auto-fixes since {a.since})" if a.since else ""))
+    print(f"Reopen report — {a.project}" + (f" (auto-fixes since {a.since})" if a.since else "") + (f" by {a.by}" if a.by else ""))
     print(f"  auto-fixed (all)          {pct(s['auto'])}")
     print(f"    --auto-low              {pct(s['auto_low'])}")
     print(f"    --auto (normal)         {pct(s['auto_normal'])}")

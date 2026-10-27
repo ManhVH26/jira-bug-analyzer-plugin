@@ -60,5 +60,15 @@ class ReopenReport(unittest.TestCase):
         self.assertTrue(0.05 < p < 0.1, p)
 
 
+class ByDev(unittest.TestCase):
+    def test_by_keeps_only_the_dev_who_added_the_label_even_after_reassign(self):
+        mine = issue("A-5", ["auto-fixed"],
+                     dict(h("2026-10-20T10:00:00.000+0700", ("labels", "", "auto-fixed")), author={"name": "me"}),
+                     dict(h("2026-10-22T10:00:00.000+0700", ("status", "Closed", "Reopened")), author={"name": "qa"}))
+        theirs = issue("A-6", ["auto-fixed"], dict(h("2026-10-20T10:00:00.000+0700", ("labels", "", "auto-fixed")), author={"name": "other"}))
+        rows = rr.classify([mine, theirs], True, by="me")
+        self.assertEqual([(r["key"], r["reopened"]) for r in rows], [("A-5", True)])
+
+
 if __name__ == "__main__":
     unittest.main()
