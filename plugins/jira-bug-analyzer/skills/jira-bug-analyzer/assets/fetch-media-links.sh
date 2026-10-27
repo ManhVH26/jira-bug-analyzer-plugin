@@ -17,7 +17,9 @@ set -euo pipefail
 
 CMD="${1:-}"; TEXT="${2:-}"
 [ -n "$CMD" ] && [ -f "$TEXT" ] || { echo "usage: fetch-media-links.sh {list <text-file> | fetch <text-file> <out-dir>}"; exit 2; }
-UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+# Identify honestly as this tool — never impersonate a browser to get past a site's bot protection.
+# A host that still refuses this agent gets LINK_ERROR, and the dev pastes/attaches the image instead.
+UA="jira-bug-analyzer/1.15.3 (+https://github.com/hung-apero/jira-bug-analyzer-plugin)"
 MAX="${MEDIA_MAX_BYTES:-52428800}"
 
 # Share-page hosts (resolve via og:image) + direct media URLs by extension.
