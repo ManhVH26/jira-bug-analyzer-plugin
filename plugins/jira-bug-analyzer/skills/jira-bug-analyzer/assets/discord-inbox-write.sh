@@ -8,7 +8,7 @@
 #
 # The script writes a JSON file (schema v1.14) into the inbox folder; the
 # --manager terminal (Job G) picks it up via Monitor, runs the LLM classifier,
-# and routes to the right intent branch — see references/helpers/discord-classifier.md.
+# and routes to the right intent branch — see references/discord/discord-classifier.md.
 #
 # No Claude session is spawned here. No tool-use is triggered.
 #

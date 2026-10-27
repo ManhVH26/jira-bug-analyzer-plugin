@@ -133,6 +133,6 @@ Verify: thấy message trong Discord channel `#jira-bug-analyzer`, mention @dev 
 ## Related
 
 - `references/helpers/auto-plan-pick.md` → "Khi defer" step 2b (nơi gọi vào đây)
-- `references/helpers/discord-resume-handler.md` → INBOUND counterpart (reply flow)
+- `references/discord/discord-resume-handler.md` → INBOUND counterpart (reply flow)
 - `assets/discord-roles.json` → config
 - SKILL.md Golden Rule `[DISCORD-DEFER]`

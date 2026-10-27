@@ -88,7 +88,7 @@ Chỉ trả về JSON, không prose.
 
 | Intent | Next helper / action | Spawn mode |
 |---|---|---|
-| **ticket-resume** | `discord-resume-handler.md` (ticket-resume branch) — Agent subagent `resume-<KEY>` chạy `/jira-bug-analyzer <KEY> --resume-from-defer --auto --auto-low` | Agent background subagent |
+| **ticket-resume** | `discord-resume-handler.md` (ticket-resume branch) — Agent subagent `resume-<KEY>` chạy `/jira-bug-analyzer <KEY> --resume-from-defer` (re-analyze + đề xuất plan, không tự fix) | Agent background subagent |
 | **bulk-op** | `discord-safety-gate.md` — Discord confirm 60s TTL. Nếu `yes` → Agent subagent `bulk-<slug>` enumerate targets + act parallel | Agent background subagent (sau gate) |
 | **query** | Agent subagent `query-<slug>` read-only — jira_search / gh pr list / ledger scan → reply Discord với kết quả | Agent background subagent (no gate — read-only) |
 | **chat/context** | Inline xử lý: save attachments vào `.jira-bug/discord-attachments/<ticket_ref or _unassigned>/` + Jira comment nếu có `ticket_ref` + Discord ack *"📝 Đã lưu context."* | Inline (không spawn) |
