@@ -13,7 +13,7 @@ Every other file names the constant (e.g. `AUTO_THRESHOLD_DEFAULT`) and points h
 | `CATEGORY_CAP` | 4 bugs / category / turn | multi-mode pick list |
 | `REFIX_BUDGET` | 2 | re-fix attempts per ticket under `--auto` before `retries-exhausted` (`helpers/auto-run-test.md`) |
 | `VERIFY_OBSERVE_RETRIES` | 5 | verifier observation retries before `blocked` |
-| `MANAGER_LOOP` | 10 min | `--manager` self-armed `/loop` cadence |
+| `MANAGER_LOOP` | 10 min | default interval of `--manager --loop` (opt-in; plain `--manager` runs one pass) |
 | `REOPEN_WATCH_DAYS` | 14 | Job D keeps re-checking a `held` auto-fix for a reopen this long after it resolved |
 | `REOPEN_SELF_FLIP_MINUTES` | 30 | a done → open flip by the same person who just resolved it, within this window, is a workflow correction, not a reopen (Job D + `scripts/reopen_report.py`) |
 | `REOPEN_TARGET` | ≤ the project's non-auto reopen rate | Phase R success bar (`scripts/reopen_report.py` prints both) |

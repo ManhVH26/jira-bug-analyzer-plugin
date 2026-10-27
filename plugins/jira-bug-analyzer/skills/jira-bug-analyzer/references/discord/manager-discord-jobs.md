@@ -134,7 +134,7 @@ Consumer side của flow INBOUND inbox-write (producer = `claudecode-discord` bo
 
 ### 2 trigger paths (realtime + fallback)
 - **Realtime (file-watch Monitor, v1.11.1+):** Monitor emit path `<new_file>` → fire 1 inline Job G tick cho CHỈ file đó. Latency < 5s.
-- **Cron fallback (every /loop tick, default 10 min):** Scan toàn folder để pick up file sót (Monitor crash, bot ghi lúc --manager chưa entry, race). + Expiry sweep `.jira-bug/pending-confirms/` (xem `discord-safety-gate.md`).
+- **Cron fallback (every /loop tick — only when `--manager --loop` is used; a one-shot run does this scan once):** Scan toàn folder để pick up file sót (Monitor crash, bot ghi lúc --manager chưa entry, race). + Expiry sweep `.jira-bug/pending-confirms/` (xem `discord-safety-gate.md`).
 
 ### Scan + classify (v1.14.0)
 1. `ls .jira-bug/discord-inbox/*.json` (loại trừ `processed/` + `.watch-stamp`). Realtime path bỏ qua step này.

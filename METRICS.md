@@ -33,7 +33,7 @@ Mỗi phase có chỉ số đo được, mốc baseline (v1.15.2, đo ngày 27/1
 | R6 | Reopen có lý do (khác `unknown`) | 0 % | ≥ 80 % | ledger `reopen_reason`; dòng `reasons:` của Job D |
 | R7 | Mốc đánh giá | — | sau ≥ 50 ticket auto mới | Job D in dòng `R7: …` |
 | P7 | Token mỗi phiên, chia theo model | chưa đo (máy này chưa chạy skill) | giảm ≥ 30 % ở model `opus` | `scripts/token_report.py --since <ngày>` trên máy dev chạy skill, trước và sau |
-| P7 | Tỉ lệ lượt manager dừng ở precheck | 0 % (chưa có precheck) | ≥ 70 % trên board yên | đếm dòng `manager: no change` trong log manager |
+| P7 | Tỉ lệ lượt manager dừng ở precheck (chỉ khi dùng `--loop`) | 0 % (chưa có precheck) | ≥ 70 % trên board yên | đếm dòng `manager: no change`; mặc định `--manager` chạy 1 lượt sau mỗi đợt QA verify nên không có lượt trống |
 | P2 | App không có flavor `appDev` build được | lỗi ở Phase 4 | build sau đúng 1 câu hỏi, lần sau không hỏi | chạy single mode trên app đó |
 | S1 | Comment `@claude` từ người ngoài danh sách được xử lý | có thể | **0** | dòng `job-e: ignored @claude …` |
 

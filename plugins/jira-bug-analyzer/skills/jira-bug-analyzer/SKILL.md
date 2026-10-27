@@ -25,7 +25,7 @@ Pipeline: select mode → gather context (board, ticket) → **auto-discover spe
 | **6. Commit & PR** — `[1COMMIT]` → PR with Phase-3+5 facts → Jira finalize in background | `references/phase6-commit-pr.md` |
 | Multi turn loop (pull → pick → fan-out → stream review/merge → re-pull) | `references/multi-turn-loop.md` |
 | Shared blocks (dedup, lock, worktree, fan-out, gates, batch-merge, watcher) | `references/run-blocks.md` |
-| **Manager mode** — self-armed `/loop`; precheck, then Jobs A–D (+ Discord E–H) | `references/phase-manager-mode.md` |
+| **Manager mode** — one reconcile pass (Jobs A–D, + Discord E–H); `--loop` to repeat | `references/phase-manager-mode.md` |
 | Errors | `references/helpers/troubleshooting.md` |
 
 ## Reference files (read when)
@@ -90,7 +90,7 @@ Resolve the mode from the invocation args FIRST (nothing else decides which init
 0. **`--google-sheet <URL>`** (board-SOURCE modifier, `[SHEET]`, `references/google-sheet-board.md`) → composes with multi/team, never single; resolve the mode by the rules below (lone project key or none ⇒ multi-without-team), pass the flag through to the init script, needs `--project <KEY>` (ask if absent). A setup with `type: "google-sheet"` behaves the same without the flag. No Jira MCP on this path.
 1. **`--team`** → multi WITH team → `references/phase1-init-multi-mode-with-team.md` (this session is MainCharacter; pair with `team/team.md`; `--devs N`). Without `--team` the skill never launches a team.
 2. **`--resume`** → a modifier (Init-5 reconcile) on whichever mode the rest selects. Off by default.
-3. **`--manager`** → manager mode → `references/phase-manager-mode.md`. Requires a `<PROJECT-KEY>` (ask if absent). **Wins over token-shape inference.** Skips pull/pick/analyze/fix. Always self-arms a recurring `/loop` (`MANAGER_LOOP`) on entry.
+3. **`--manager`** → manager mode → `references/phase-manager-mode.md`. Requires a `<PROJECT-KEY>` (ask if absent). **Wins over token-shape inference.** Skips pull/pick/analyze/fix. Runs one pass and stops; `--loop [interval]` opts into a recurring in-session loop (`MANAGER_LOOP`).
 3b. **`--resume-from-defer <KEY>`** → re-analyze a deferred ticket and propose a plan — **stops after Phase 3, never fixes, never with `--auto`** → `references/discord/resume-from-defer.md`.
 4. **`--mode single <KEY>`** or a bare **ticket key** `[A-Z][A-Z0-9]+-\d+` (e.g. `AIP686-179`) → single → `references/phase1-init-single-mode.md`; board = the key's prefix, passed as `init-single.sh --project <BOARD>`.
 5. **A bare project key** `[A-Z][A-Z0-9]+` (no `-<number>`) → multi without team, that key IS the board → `references/phase1-init-multi-mode-without-team.md`, run `init-multi.sh "<root>" --project <KEY>`; emit one line *"project key `<KEY>` → multi mode, board=<KEY>"*.

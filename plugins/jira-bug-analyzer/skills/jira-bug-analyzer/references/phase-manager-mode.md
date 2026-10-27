@@ -2,8 +2,8 @@
 
 ## Must-do checklist (read this even if you skim the rest)
 Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
-- [ ] **Arm the loop on entry** (skipped on the first real run): `.jira-bug/manager-loop.json` absent or for another board → invoke the `loop` skill with `args: "10m /jira-bug-analyzer --manager <KEY>"` and write the marker `{board, phase, interval, cronId, armedAt}` → quote the `cronId`. Present and live → skip.
-- [ ] `bash <skill-dir>/assets/manager-precheck.sh "<root>" <KEY>` first; quiet → one line, end the pass.
+- [ ] **One pass by default.** Arm a recurring loop ONLY when the invocation carries `--loop [interval]` (section "Optional loop"); without it, run one full pass, report, stop — never arm a cron on your own.
+- [ ] Under `--loop` only: `bash <skill-dir>/assets/manager-precheck.sh "<root>" <KEY>` first; quiet → one line, end the fire. A one-shot run skips the precheck and does a full pass.
 - [ ] Job D writes every outcome with `bash <skill-dir>/assets/ledger.sh upsert … status=done|reopened …` (interactive and `--auto` fixes) → quote `LEDGER_COMMIT=`.
 - [ ] Job B cleans worktrees only for PRs that are merged/closed.
 - [ ] Job D ignores a done → open flip by the resolver within `REOPEN_SELF_FLIP_MINUTES` (workflow correction, not a reopen).
@@ -14,10 +14,11 @@ Every line is a command or a check; the end-of-run report quotes each one's evid
 > worktrees** on merge/close, **backfill the knowledge base** for tickets that reached Done,
 > **track the reopen outcome of `--auto` fixes** (Job D — the auto-fix quality metric), and
 > **chủ động watch comment trên ticket deferred** (Job E — dev reply trên Jira với marker `@claude`/`@agent` thì Job E tự fetch + xử lý).
-> **`--manager` ALWAYS runs as a recurring `/loop` — never a bare one-shot.** On entry the mode
-> **self-arms a `/loop` (default every 10 min)** for this board+phase, then runs ONE reconcile pass;
-> each loop fire = one more pass. The dev never has to re-run it manually — the loop keeps
-> reconciling while the session is open (see the honest caveat).
+> **`--manager` runs ONE full reconcile pass and stops (v1.15.3).** Run it when there is something to
+> reconcile — typically once after QA has verified a batch, before the next fix batch. Outcomes are
+> read from the Jira changelog, so a run days later still records every done/reopen in between.
+> `--manager --loop [interval]` opts into a recurring in-session loop (default `MANAGER_LOOP`) for teams
+> that want review comments picked up within minutes.
 
 Read this when the dispatcher resolves `--manager` — **the 3rd mode** (alongside single and multi), invoked the one way: `/jira-bug-analyzer --manager <PROJECT-KEY>`.
 It REPLACES the "TBD PR-watch mode" the older docs pointed at — the watcher logic it drives lives
@@ -34,34 +35,30 @@ in `references/helpers/pr-merge-watcher.md`; the KB writes go through `reference
 - `@N` phase token resolves the phase the same as elsewhere (used by Job C to find the right
   `session/record_bug_status.md`); absent → derive from the spec title, else `phase1`.
 
-## Self-arm the `/loop` (MANDATORY — do this FIRST, before the reconcile pass)
-`--manager` is never a bare one-shot. On every entry, **before** the reconcile pass, ensure a
-recurring loop is armed for this board+phase — idempotently, via a marker file:
+## Optional loop (`--loop [interval]` only)
+Default `--manager` is one pass: do NOT arm anything. Why: QA usually verifies in batches, so most
+fires of a 10-minute loop find nothing and still cost a model turn over the whole session context.
 
+Only when the invocation carries `--loop` (optionally `--loop 30m`; default `MANAGER_LOOP`):
 1. Read `.jira-bug/manager-loop.json` at the target project root (untracked).
-2. **Marker absent, OR its `board`/`phase` differ from this run, OR its `cronId` is no longer live**
-   → **arm the loop**: invoke the `loop` skill (Skill tool) with
-   `args: "10m /jira-bug-analyzer --manager <KEY> @N"` (default cadence **10 min**; this routes
-   through `/loop` → `CronCreate` `*/10 * * * *`, recurring). Then write the marker
-   `{ "board": "<KEY>", "phase": "phaseN", "interval": "10m", "cronId": "<id>", "armedAt": "<ISO>" }`.
-   Announce one line: *"manager loop armed — every 10 min for <KEY> @N (job <id>)"*.
-3. **Marker present and matches** (this entry IS a loop fire or a re-invocation) → **skip arming**,
-   just run the reconcile pass below. Never double-arm.
-4. **Interval override:** default is 10 min. To change it, the dev deletes `.jira-bug/manager-loop.json`
-   and re-invokes via `/loop <interval> /jira-bug-analyzer --manager <KEY> @N` — the next manager
-   entry re-arms at the new cadence and rewrites the marker. **To stop the loop:** `CronDelete <cronId>`
-   (from the marker) + delete the marker. Only stop when the dev asks.
+2. **Marker absent, OR its `board`/`phase` differ, OR its `cronId` is no longer live** → invoke the
+   `loop` skill (Skill tool) with `args: "<interval> /jira-bug-analyzer --manager <KEY> @N"` (the inner
+   command carries no `--loop`, so a fire never re-arms), then write the marker
+   `{ "board": "<KEY>", "phase": "phaseN", "interval": "<interval>", "cronId": "<id>", "armedAt": "<ISO>" }`
+   and announce *"manager loop armed — every <interval> for <KEY> @N (job <id>)"*.
+3. **Marker present and live** (this entry IS a loop fire) → skip arming, run the precheck, then the pass.
+4. **Stop:** `CronDelete <cronId>` (from the marker) + delete the marker, when the dev asks.
 
 ### Discord inbox in-session watcher — DEFERRED load
 If env `JIRA_BUG_DISCORD_DEFER=1`, arm the Bash+Monitor file-watch on `.jira-bug/discord-inbox/`. **The full setup + lifecycle lives in `references/discord/manager-discord-jobs.md` → "Discord inbox in-session watcher"**. Load that file ONLY when env is set — otherwise skip entirely. If env unset: skip arm (silent, no log needed).
 
-## Precheck — FIRST step of every pass (P7, v1.15.3)
-Before reading anything else (no Discord file, no ledger, no job text), run `bash <skill-dir>/assets/manager-precheck.sh "<root>" <KEY>` and act on its lines:
+## Precheck — FIRST step of every LOOP fire (P7, v1.15.3)
+A one-shot `--manager` (no `--loop`) skips this and runs the full pass. On a loop fire, before reading anything else (no Discord file, no ledger, no job text), run `bash <skill-dir>/assets/manager-precheck.sh "<root>" <KEY>` and act on its lines:
 - `LOCAL=quiet` **and** `FULL_DUE=no` → run its `JIRA_JQL` once with `jira_search` (`limit: 1`). Total `0` → print ONE line `manager: no change (<KEY>, fire <n>)` and **end the pass** — do not run Jobs A–H.
 - Anything else (`LOCAL=changed`, `FULL_DUE=yes`, or the JQL returns ≥ 1) → run the reconcile pass below. Jobs whose trigger did not change may still be skipped (e.g. `INBOX_NEW=0` → Job G/H have no input).
 `FULL_DUE` forces a complete pass every `MANAGER_PRECHECK_FULL_EVERY` fires (default 6 ≈ 1 h at `MANAGER_LOOP`) so Job D's `held` re-checks (`REOPEN_WATCH_DAYS`) and orphan-Done scans still happen. Metric: the share of fires that end at the precheck (count `manager: no change` lines) — target ≥ 70 % on a quiet board.
 
-## The reconcile pass (one pass per loop fire — then end the pass, the /loop re-fires)
+## The reconcile pass (one per `--manager` run, or per loop fire under `--loop`)
 Promotes the old **Init-5 reconcile** to a first-class mode. Read `.jira-bug/pr-watch.json` at the
 target project root (untracked). For **each** entry, take an **atomic per-PR `mkdir` lock**
 (`references/helpers/device-lock.md` pattern, keyed by PR — so this never collides with an
@@ -166,15 +163,15 @@ KB stays English; per `[VN]` only dev-facing prompts (none here — Job C asks n
 
 
 ## Honest expectation (state it; don't overpromise)
-The self-armed `/loop` rides on `CronCreate`, which is **not a background daemon** — it fires only
+Only relevant with `--loop`: the loop rides on `CronCreate`, which is **not a background daemon** — it fires only
 while a Claude session is open and idle (see `pr-merge-watcher.md` → "How the watcher actually
 triggers"). So the loop auto-repeats the reconcile **only while this session stays open**; close the
 session and it stops. Each fire reconciles everything reachable in one pass. For a loop that survives
 closing the terminal, the dev uses `/schedule` (cloud cron) instead. State this; don't imply the
 in-session loop is durable across restarts.
 
-## Returns (per-pass summary, then end the pass — the /loop re-fires automatically)
-Print a concise summary and end the pass (do NOT `CronDelete` the manager loop — it must keep firing):
+## Returns (per-pass summary, then end the pass)
+Print a concise summary and end the pass (under `--loop`, do NOT `CronDelete` the loop — it keeps firing):
 - 💬 **Review comments** handled (PR → applied / replied / parked-for-`--auto`).
 - 🧹 **Worktrees** removed (merged/closed PRs).
 - 📚 **KB**: upserted (`<category>/<slug>`), bumped (`<slug>`), skipped (app-specific).
