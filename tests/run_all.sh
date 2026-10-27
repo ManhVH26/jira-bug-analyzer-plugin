@@ -88,6 +88,27 @@ check "unreadable file is never overwritten" "LEDGER_ERROR=unrecognised" "$out"
 check "unreadable file left as it was" "free notes" "$(cat "$LC/project/R/ph/session/record_bug_status.md")"
 check "every write reached the remote" "ledger Q-2 delete" "$(git --git-dir="$TMP/mem.git" log --oneline -1)"
 
+echo "fetch-media-links.sh — screenshot share links become files (offline, file:// fixtures)"
+FM="$TMP/fml"; mkdir -p "$FM/site"
+python3 - "$FM/site/shot.png" <<'PY'
+import struct, sys, zlib
+def chunk(t, d): return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\x00")) + chunk(b"IEND", b"")
+open(sys.argv[1], "wb").write(png)
+PY
+printf '<html><head><meta content="file://%s/site/shot.png" property="og:image"></head></html>' "$FM" > "$FM/site/prnt.sc-AAA.html"
+printf '<html><head><title>deleted</title></head></html>' > "$FM/site/prnt.sc-GONE.html"
+printf 'not an image' > "$FM/site/fake.png"
+printf 'Lỗi chữ, xem file://%s/site/prnt.sc-AAA.html, ảnh trực tiếp file://%s/site/shot.png.\nLink hỏng file://%s/site/prnt.sc-GONE.html\nGiả file://%s/site/fake.png\nKhông phải media https://example.com/docs\n' "$FM" "$FM" "$FM" "$FM" > "$FM/ticket.txt"
+out="$(bash "$ASSETS/fetch-media-links.sh" list "$FM/ticket.txt")"
+check "list finds share pages and direct media" "prnt.sc-AAA.html" "$out"
+case "$out" in *example.com*) bad "list ignores non-media links" ;; *) ok "list ignores non-media links" ;; esac
+out="$(bash "$ASSETS/fetch-media-links.sh" fetch "$FM/ticket.txt" "$FM/out")"
+check "share page resolved through og:image to a PNG" "SOURCE=file://$FM/site/prnt.sc-AAA.html" "$out"
+check "page without og:image is reported, not dropped" "REASON=no og:image" "$out"
+check "a non-image behind a .png URL is rejected" "REASON=not an image/video" "$out"
+check "saved files are real PNGs" "PNG image data" "$(file "$FM/out/"link-*.png | head -1)"
+
 echo "setup-json merge keeps JSON valid"
 S="$TMP/s.json"; printf '{\n  "board": "X"\n}\n' > "$S"
 bash "$ASSETS/setup-json.sh" merge-set "$S" buildCmd="./gradlew assembleDebug" >/dev/null

@@ -27,5 +27,5 @@ On a human-mcp call that fails with a **quota / auth / all-keys-exhausted** erro
 When step 2 says exhausted-today, or human-mcp isn't configured at all: analyze with **Claude-native vision**, and because that Reads bytes into context, **apply `references/helpers/media-preprocessing.md`** (resize images ≤1280px, extract video keyframes, read docs by section). This is the ONLY path where the shrink recipe matters.
 
 ## Where this is used
-- **Phase 3 Fix-5** (`references/phase3-analyze.md`) — Jira attachment image/video → `eyes_analyze`.
+- **Phase 3 Fix-5** (`references/phase3-analyze.md`) — Jira attachment image/video → `eyes_analyze`. **Share links in the ticket text** (prnt.sc / Lightshot, ibb.co, imgur, gyazo, postimg, direct media URLs) are first turned into files by `assets/fetch-media-links.sh` (resolves a share page to its `og:video`/`og:image`, keeps only real image/video files by magic bytes), then analyzed the same way.
 - **Phase 5 verify** (`references/phase5-verify.md`) + **`android-ui-verify`** / **`android-self-verify`** — observe a device screencap → `eyes_analyze`; the device⟷Figma design-diff → `eyes_compare`. Evidence files are still SAVED to disk for the PR/Jira regardless of which path analyzed them.
