@@ -37,6 +37,13 @@ This verification **always runs** when invoked. You may NOT skip or shortcut it 
 > ```
 > A bare `adb -s <serial> …` bypasses the lock and lets a second terminal drive the same device — its screen then lands in YOUR evidence. `NOTOWNER` (exit 3) → stop and report `blocked`; never mint your own token, never fall back to raw adb. Standalone (no `--owner-token` given, no lock in play) → plain `adb -s` is fine.
 
+> **Reach the state the bug needs by the SHORTEST path — and give up fast when stuck (AIP396-475: 11 min, 92 commands, 96 sleeps, never reached the state).**
+> - **Look before acting:** dump the current screen first; the state you need (a saved word, a locked lesson, a filled list) may already exist.
+> - **Find the path, don't wander:** before tapping around, locate the action in code (grep the feature's screens/ViewModels or the SDK sources for the button/event, e.g. `onSaveWord`, `WordSheet`) and in the `uiautomator` dump; then go straight there.
+> - **Never consume content to get somewhere** — don't watch a video to the end, play a whole lesson, or finish a quiz unless the bug is about that flow. Pause, seek, tap the element, or use a shortcut.
+> - **Budget:** no progress toward the target state after ~25 commands or ~5 minutes → stop and return `blocked` with what you tried and where you are stuck (screen + what's missing). The caller (or the dev) supplies the path; that is cheaper than more taps.
+> - The caller's brief may guess a UI path; if the screen does not match the brief, trust the screen and the code, and say so in the verdict.
+
 1. **Confirm the target** — verify the passed `--serial` is connected (`adb -s <serial> get-state` == `device`). Not connected → `blocked` (caller's lock points at a gone device).
 2. **Launch from the worktree** — install + launch the `--variant` build **from the worktree dir** on `--serial`. App already running from the caller's run step → bring it foreground; otherwise launch it.
 3. **Drive thoroughly — don't glance at one screen:**

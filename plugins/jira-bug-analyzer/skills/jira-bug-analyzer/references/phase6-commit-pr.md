@@ -64,11 +64,8 @@ Written for a non-technical reader (`[VN]`: có dấu, no code/stack/paths — t
 • Đã kiểm thử: <thiết bị + bước kiểm thử + kết quả quan sát được>
 • Lưu ý cho QA: <điều QA cần biết / phần cố ý giữ nguyên>  ← bỏ dòng này nếu không có
 • Pull request: [PR #N|<pr_url>] (đang chờ review, chưa merge)
-
-*Ảnh/Video kiểm thử:*
-!<evidence-1.png>!
-[^<evidence-2.mp4>]
 ```
+The `*Ảnh/Video kiểm thử:*` heading and the `!image!` / `[^video]` embeds are appended by `jira_evidence_comment` — do NOT write them in the body (writing them too produced the heading twice on AIP396-475).
 Do **not** hand-roll the upload+embed — call the helper, which attaches first, embeds by media type, posts, and **verifies the embed actually rendered** (`references/helpers/jira-rest-api.md` → *Evidence — attach it AND EMBED it in the comment*):
 ```bash
 jira_evidence_comment "<TICKET>" /tmp/<TICKET>-comment.txt .jira-bug/evidence/<TICKET>/*

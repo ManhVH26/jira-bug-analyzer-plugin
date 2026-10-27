@@ -163,6 +163,12 @@ def check_phase_checklists(skill, md, r):
                 prose += 1
                 r.err("ledger-prose", f"{p}:{i} asks memory-keeper to write record_bug_status.md — use assets/ledger.sh")
     r.metrics["phase_files_without_checklist"] = missing
+    # Jira at Apero is Server/DC: /rest/api/3 does not exist there (AIP396-475 upload failed on it).
+    for path, text in md.items():
+        for i, line in enumerate(text.splitlines(), 1):
+            code = line.split("#", 1)[0] if line.lstrip().startswith(("curl", '"$', "'$", "  ", "\t")) else line
+            if "/rest/api/3/" in code:
+                r.err("jira-api-v3", f"{rel(path, skill)}:{i} calls /rest/api/3 — jira.apero.vn (Server/DC) only has /rest/api/2")
     r.metrics["ledger_writes_as_prose"] = prose
 
 

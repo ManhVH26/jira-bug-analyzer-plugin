@@ -4,7 +4,7 @@
 Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
 - [ ] Gate 1: show the diff (GitHub webview; `--auto`: `code-reviewer`, `model: sonnet`).
 - [ ] Device ONLY through the lock: `SERIAL=$(bash <skill-dir>/assets/device-lock.sh free-serial "<session-id>" 1800)` → `bash <skill-dir>/assets/device-lock.sh install "$SERIAL" "<session-id>" <apk>`. A bare `adb install` / `adb -s … install` is a bug.
-- [ ] Verifier subagent (`model: sonnet`); evidence saved under `.jira-bug/evidence/<TICKET>/` (behavioral: state-change scenarios too).
+- [ ] Verifier subagent (`model: sonnet`); evidence saved under `.jira-bug/evidence/<TICKET>/` (behavioral: state-change scenarios too). Its brief names the target state and, when known from the analysis, the code entry point that reaches it (e.g. "save a word: tap a subtitle word → word sheet → Lưu"); never a guessed UI path. A `blocked` after its ~25-command budget comes back to you — fix the path, don't re-launch the same brief.
 - [ ] `--auto` + behavioral + no device → defer `no-device` (no PR).
 - [ ] `bash <skill-dir>/assets/device-lock.sh release "$SERIAL" "<session-id>"` when done.
 

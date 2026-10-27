@@ -100,7 +100,7 @@ jira_evidence_comment() {
     local RESP; RESP=$(curl -sS -X POST \
       -H "Authorization: Bearer $JIRA_TOKEN" -H "X-Atlassian-Token: no-check" \
       -F "file=@$F" \
-      "$JIRA_URL/rest/api/3/issue/$KEY/attachments")
+      "$JIRA_URL/rest/api/2/issue/$KEY/attachments")   # v2: Jira Server/DC (jira.apero.vn) has no /rest/api/3
     local NAME; NAME=$(printf '%s' "$RESP" | python3 -c 'import sys,json; print(json.load(sys.stdin)[0]["filename"])' 2>/dev/null)
     [ -z "$NAME" ] && { echo "ATTACH FAILED for $F: $RESP" >&2; continue; }
 
@@ -119,7 +119,11 @@ url, key = sys.argv[1], sys.argv[2]
 body = open(os.environ["BODY_FILE"]).read().rstrip()
 embeds = os.environ["EMBEDS"].replace("\\n", "\n")
 if embeds.strip():
-    body += "\n\n*" + os.environ["EVIDENCE_CAPTION"] + ":*" + embeds
+    cap = os.environ["EVIDENCE_CAPTION"]
+    # The caller's body may already end with the caption line (older templates did) — never write it twice.
+    if cap.lower() not in body.lower():
+        body += "\n\n*" + cap + ":*"
+    body += embeds
 out = subprocess.run([
     "curl", "-sS", "-X", "POST",
     "-H", "Authorization: Bearer " + os.environ["JIRA_TOKEN"],
