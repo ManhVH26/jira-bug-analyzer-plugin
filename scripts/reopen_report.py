@@ -119,7 +119,7 @@ def summarize(auto_rows, base_rows):
         "baseline_non_auto": base,
         "p_value_auto_vs_baseline": two_prop_p(auto, base),
         "label_missed_reopens": sum(1 for x in auto_rows if x["reopened"] and not x["label_says_reopened"]),
-        "meets_target": (auto["rate"] is not None and base["rate"] is not None and auto["rate"] <= base["rate"]),
+        "meets_target": None if auto["rate"] is None or base["rate"] is None else auto["rate"] <= base["rate"],
     }
 
 
@@ -168,7 +168,8 @@ def main():
     print(f"  baseline (non-auto bugs)  {pct(s['baseline_non_auto'])}")
     print(f"  p-value auto vs baseline  {s['p_value_auto_vs_baseline']}")
     print(f"  reopens the label missed  {s['label_missed_reopens']}")
-    print(f"  target (auto <= baseline) {'MET' if s['meets_target'] else 'not met'}")
+    verdict = {None: "n/a (no auto-fixes yet)", True: "MET", False: "not met"}[s["meets_target"]]
+    print(f"  target (auto <= baseline) {verdict}")
 
 
 if __name__ == "__main__":
