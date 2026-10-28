@@ -39,6 +39,13 @@ Driven by AAP729 data (16–22/10/2026): `--auto` fixes were reopened 30 % (25/8
 - `--auto` with `AUTO_SCOPE=ui-only` classifies UI vs behavioral BEFORE any build or device repro (Phase 3 Fix-5.5 step 1b): a behavioral ticket used to be built and reproduced for 34 min and then deferred.
 - Init prints `HEADLESS=1` under `claude -p` (cron, CI); the main session then waits for its agents in the same turn instead of ending it, because `-p` stops background work ~10 min after the turn ends.
 
+### Second A/B round (6 tickets, new skill fixed 6/6, old 5/6; 5/5 as complete as the real fix, old 4/5)
+- Deferral rules relaxed from what the dev did by hand on the same tickets (all three QA-Closed): `no-sot` only when the fix needs a new design choice — an expected result from the ticket or a code precedent `file:line` proceeds; a behavioral ticket is auto-fixed when reproduced on device + single root cause + small change + device verify (label `auto-fix-behavioral`); `SMALL_CHANGE_MAX` = 40 changed lines / 5 files, a shared API may only gain a defaulted parameter.
+- Review rules R23 (fix a wrong displayed value where it is read — no write on read, no rewrite listener), R24 (every read path / every call site of a changed shared component in the flow), R25 (a string defect is fixed in every locale that has it).
+- A4.0: repro runs on a freshly built `origin/<BASE>` APK, never on the app already installed.
+- Device work is scripted and bounded: `assets/shot.sh` (capture through the lock, crop to on-screen text, shrink to 540–720 px, 25 s deadline + pull fallback), `assets/dev.sh` (`tap_text`, `wait_text`, `ui`, `back`, `L` — each adb call has a deadline). Verifier brief: a fixed scenario list (≤ 3) and an image budget, reported as `IMAGES=n/budget`.
+- `jira.sh evidence` posts the repro proof in one call; `jira.sh finalize --labels … --auto-eval pending` adds labels and the eval line, read back. The main session runs finalize itself.
+
 ### Tooling
 - `scripts/lint_skill.py`, `tests/run_all.sh` (15 checks), CI `.github/workflows/lint.yml`, `scripts/metrics.py`, `scripts/reopen_report.py`, `scripts/token_report.py`, `tests/SCENARIOS.md`.
 - `scripts/sync-from-local-skill.sh` refuses a source older than this repo and runs the tests after syncing.

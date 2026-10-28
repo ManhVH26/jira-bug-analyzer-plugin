@@ -7,8 +7,11 @@
 #
 # Usage:
 #   jira.sh claim    <TICKET>                       # In Progress + assign to the token owner
-#   jira.sh finalize <TICKET> <body-file> <evidence-dir> [--time 30m] [--pr <url>]
+#   jira.sh evidence <TICKET> <body-file> <evidence-dir>   # Phase-3 Fix-6b: repro-* media attached + embedded in one comment
+#   jira.sh finalize <TICKET> <body-file> <evidence-dir> [--time 30m] [--pr <url>] [--labels a,b]
 #                    [--ledger <PROJ> <PHASE> --root <repo-root> [--auto-eval pending|-]]
+#     --labels     = add these labels (merged, read back) — `--auto`: auto-fixed[,auto-fix-behavioral][,auto-fix-low]
+#     --auto-eval pending also posts the one-line [AUTO-FIX EVAL] comment (Phase 6)
 #     body-file    = the [VN] resolve comment (wiki markup; Markdown **bold** / `code` are converted)
 #     evidence-dir = .jira-bug/evidence/<TICKET>/ — every repro-* / verify-* image or video in it is
 #                    attached FIRST, then embedded in the comment (images inline, videos as chips)
@@ -20,12 +23,12 @@ set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CMD="${1:-}"; TICKET="${2:-}"
-[ -n "$CMD" ] && [ -n "$TICKET" ] || { echo "usage: jira.sh {claim <TICKET> | finalize <TICKET> <body-file> <evidence-dir> [opts]}"; exit 2; }
+[ -n "$CMD" ] && [ -n "$TICKET" ] || { echo "usage: jira.sh {claim <TICKET> | evidence <TICKET> <body-file> <evidence-dir> | finalize <TICKET> <body-file> <evidence-dir> [opts]}"; exit 2; }
 shift 2
 
-BODY=""; EVID=""; TIME="30m"; PR=""; LPROJ=""; LPHASE=""; LROOT="$PWD"; AEVAL="-"
-if [ "$CMD" = "finalize" ]; then
-  BODY="${1:?finalize needs <body-file>}"; EVID="${2:?finalize needs <evidence-dir>}"; shift 2
+BODY=""; EVID=""; TIME="30m"; PR=""; LPROJ=""; LPHASE=""; LROOT="$PWD"; AEVAL="-"; LABELS=""
+if [ "$CMD" = "finalize" ] || [ "$CMD" = "evidence" ]; then
+  BODY="${1:?$CMD needs <body-file>}"; EVID="${2:?$CMD needs <evidence-dir>}"; shift 2
   while [ $# -gt 0 ]; do
     case "$1" in
       --time) TIME="$2"; shift 2 ;;
@@ -33,16 +36,17 @@ if [ "$CMD" = "finalize" ]; then
       --ledger) LPROJ="$2"; LPHASE="$3"; shift 3 ;;
       --root) LROOT="$2"; shift 2 ;;
       --auto-eval) AEVAL="$2"; shift 2 ;;
+      --labels) LABELS="$2"; shift 2 ;;
       *) echo "JIRA_ERROR=unknown option $1"; exit 2 ;;
     esac
   done
   [ -f "$BODY" ] || { echo "JIRA_ERROR=no body file $BODY"; exit 1; }
 fi
 
-python3 - "$CMD" "$TICKET" "$BODY" "$EVID" "$TIME" "$PR" <<'PY' || RC=$?
+python3 - "$CMD" "$TICKET" "$BODY" "$EVID" "$TIME" "$PR" "$LABELS" "$AEVAL" <<'PY' || RC=$?
 import json, mimetypes, os, re, sys, urllib.request, urllib.error, uuid
 
-cmd, key, body_file, evid, time_spent, pr = sys.argv[1:]
+cmd, key, body_file, evid, time_spent, pr, labels, aeval = sys.argv[1:]
 
 def cred(name):
     v = os.environ.get(name, "")
@@ -95,13 +99,14 @@ if cmd == "claim":
     print(f"JIRA_STATUS={now} JIRA_ASSIGNEE={user if code == 204 else 'FAILED:' + str(code)}")
     sys.exit(0 if now.lower() == "in progress" and code == 204 else 1)
 
-if cmd != "finalize":
+if cmd not in ("finalize", "evidence"):
     print("JIRA_ERROR=unknown command " + cmd); sys.exit(2)
 
 missing = []
+prefix = r"repro" if cmd == "evidence" else r"(repro|verify)"
 # 1) attach evidence first — an embed only renders when the attachment already exists
 files = sorted(os.path.join(evid, f) for f in os.listdir(evid)) if os.path.isdir(evid) else []
-files = [f for f in files if os.path.isfile(f) and re.match(r"(repro|verify)", os.path.basename(f))
+files = [f for f in files if os.path.isfile(f) and re.match(prefix, os.path.basename(f))
          and (mimetypes.guess_type(f)[0] or "").split("/")[0] in ("image", "video")]
 embeds = []
 for f in files:
@@ -117,7 +122,7 @@ for f in files:
         missing.append("attach:" + os.path.basename(f))
 print(f"JIRA_ATTACHED={len(embeds)}/{len(files)}")
 if not files:
-    print("JIRA_WARN=no repro-*/verify-* media in " + evid + " — the comment carries no proof")
+    print("JIRA_WARN=no " + ("repro-*" if cmd == "evidence" else "repro-*/verify-*") + " media in " + evid + " — the comment carries no proof")
 
 # 2) comment: wiki markup, evidence embedded
 text = open(body_file, encoding="utf-8").read().rstrip()
@@ -139,6 +144,25 @@ else:
     ok = not any(e.startswith("!") for e in embeds) or bool(re.search(r"<img|/attachment/", html))
     if not ok: missing.append("embed")
     print(f"JIRA_COMMENT={cid} EMBED={'ok' if ok else 'NOT-RENDERED'}")
+
+if cmd == "evidence":
+    print("EVIDENCE=" + ("ok" if not missing else "partial MISSING=" + ",".join(missing))); sys.exit(1 if missing else 0)
+
+# 2b) labels (merged, read back) + the [AUTO-FIX EVAL] line under --auto
+if labels:
+    want = [l for l in labels.split(",") if l]
+    call("PUT", f"/issue/{key}", {"update": {"labels": [{"add": l} for l in want]}})
+    _, d = call("GET", f"/issue/{key}?fields=labels")
+    have = d["fields"].get("labels", []) if isinstance(d, dict) else []
+    lack = [l for l in want if l not in have]
+    if lack: missing.append("labels:" + "+".join(lack))
+    print("JIRA_LABELS=" + ",".join(have))
+if aeval == "pending":
+    import datetime
+    line = f"[AUTO-FIX EVAL] resolved by /jira-bug-analyzer --auto on {datetime.date.today()} · PR {pr or '-'} · reopen-outcome: pending (tracked by --manager)"
+    code, _ = call("POST", f"/issue/{key}/comment", {"body": line})
+    if code != 201: missing.append("auto-eval")
+    print(f"JIRA_AUTO_EVAL={'ok' if code == 201 else 'FAILED:' + str(code)}")
 
 # 3) Resolved, read back
 now = transition("Resolved")

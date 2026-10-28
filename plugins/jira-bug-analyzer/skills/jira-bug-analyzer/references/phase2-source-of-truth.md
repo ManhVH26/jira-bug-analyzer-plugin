@@ -2,7 +2,7 @@
 
 ## Must-do checklist (read this even if you skim the rest)
 Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
-- [ ] Resolve spec/figma with the §2.0 ladder (`references/helpers/source-of-truth-discovery.md`) — interactive: one-tap confirm; `--auto`: self-verify, else defer `no-sot`.
+- [ ] Resolve spec/figma with the §2.0 ladder (`references/helpers/source-of-truth-discovery.md`) — interactive: one-tap confirm; `--auto`: self-verify; none found → each ticket names its expected-result source (ticket / code precedent), and only `chưa có` defers `no-sot` (`auto-plan-pick.md`).
 - [ ] Launch the capture in the background; never wait for it before Phase 3.
 
 > The flow's second phase: **Intake (phase1) → Source-of-truth capture (THIS phase) → Analyze (phase3) → Fix (phase4).** Runs once per project+phase. It captures the **FULL project+phase ground truth** (Confluence spec, Figma, external-link content) into the shared memory repo — **phase-scoped, independent of which tickets were picked**, so the one capture serves every ticket in the phase and fixes match intended design, not just suppress the symptom (supersedes the old per-repo `CLAUDE.md` gate). **This is no longer a blocking gate.** The only synchronous step is **discovery (§2.0)** — which resolves the spec/figma links **automatically** in the common case and asks the dev **only** when detection comes back fuzzy or empty; the capture/digest itself runs in the **background** while Analyze (phase3) proceeds. Shared machinery it leans on lives in `references/run-blocks.md`; the memory mechanics + file schemas live in `references/helpers/memory.md`. Cross-cutting invariants are SKILL.md **Golden Rules** — cited by tag, not restated.
@@ -18,7 +18,7 @@ Two parts, in order:
 What Phase 2 needs from it, in one line each:
 - **Run it FIRST, synchronously, in EVERY mode** (single / multi / team / auto) — it is a *detection* step, never "an ask". It walks memory cache (L0/L1) → the `--spec`/`--figma` override (L0.5) → ticket-local (L2/L2b/L2c) → **PROJECT-level via Jira MCP (L2d/L2e/L2f)** → Confluence (L3a/L3b) → Figma (L4/L5).
 - **It returns `resolved`** (spec + figma + otherRefs, with tier · `detectedFrom` · rung trace) → proceed to the background capture below. **Interactive confirms the adoption with the dev; `--auto` self-verifies instead of asking.**
-- **It returns `none`** → interactive falls back to the blocking paste-ask (spec+figma cannot be waived); `--auto` never asks — it emits the rung trace + remedy and the tickets defer `no-sot`.
+- **It returns `none`** → interactive falls back to the blocking paste-ask (spec+figma cannot be waived); `--auto` never asks — it emits the rung trace + remedy; tickets whose expected result comes from the ticket or a code precedent still proceed, the rest defer `no-sot`.
 - **Persistence, the `<PHASE>` chicken-and-egg, and the `--spec`/`--figma`/`--rediscover` flags** are all defined there too.
 
 ## Which phase folder — confirm `<PHASE>` from the spec title

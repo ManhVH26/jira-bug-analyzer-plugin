@@ -7,9 +7,9 @@
 > Rubric anh em: `auto-ticket-pick.md` (Phase 1), `auto-plan-pick.md` (Phase 3).
 
 ## Gate 1 — code-reviewer chấm diff (thay người duyệt)
-- Chấm diff theo **`references/helpers/fix-code-rules.md` (`R1`–`R22`)** — surgical? đúng root-cause? đúng style/layer/design-system? không gây regression? sạch?
+- Chấm diff theo **`references/helpers/fix-code-rules.md` (`R1`–`R25`)** — surgical? đúng root-cause? đúng style/layer/design-system? không gây regression? sạch? **Fix dữ liệu/hành vi: trả lời rõ R23 (hàm đọc có ghi dữ liệu không?) và R24 (mọi đường đọc cùng dữ liệu đã sửa hết chưa?) trong báo cáo; fix chuỗi: R25 (mọi locale có cùng lỗi đã sửa chưa?).**
 - **Không có lỗi `critical`** (clean / chỉ nit/style) → qua Gate 2.
-- **Có lỗi `critical`** (sai logic, security, crash, sai scope, **hoặc vi phạm rule nghiêm trọng**: refactor ngoài scope R2, vá triệu chứng R5–R6, phá Clean-Arch/design-system R11–R13, rủi ro regression R14–R17) → re-fix (Phase 4). **Tính vào retry budget.**
+- **Có lỗi `critical`** (sai logic, security, crash, sai scope, **hoặc vi phạm rule nghiêm trọng**: refactor ngoài scope R2, vá triệu chứng R5–R6, phá Clean-Arch/design-system R11–R13, rủi ro regression R14–R17, ghi khi đọc R23, sót đường đọc R24, sót locale R25) → re-fix (Phase 4). **Tính vào retry budget.**
 - Nit/style → chỉ ghi vào PR body, không chặn.
 
 ## Gate 2 — verifier skill LÀ cổng verify (thay user-verify card)

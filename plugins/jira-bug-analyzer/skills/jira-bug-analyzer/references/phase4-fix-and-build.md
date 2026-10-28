@@ -3,7 +3,7 @@
 ## Must-do checklist (read this even if you skim the rest)
 Every line is a command or a check; the end-of-run report quotes each one's evidence (or says `chưa làm` + why). `<skill-dir>` = this skill's folder.
 - [ ] `git fetch` then a worktree from `origin/<BASE>` — never edit the main checkout.
-- [ ] Change only what the approved plan says (`references/helpers/fix-code-rules.md` R1–R22).
+- [ ] Change only what the approved plan says (`references/helpers/fix-code-rules.md` R1–R25).
 - [ ] `BUILD_CMD_SOURCE=default` → `bash <skill-dir>/assets/build-task-check.sh "<repo root>" "<BUILD_CMD>"` before the first build. `BUILD_TASK=missing` → interactive: ask the dev `[OPTIONS]` from `CANDIDATES=` (`SUGGEST=` first); `--auto`: use `SUGGEST=` (none → defer `build-task`) and say so in the run report. Either way save `setup-json.sh merge-set .jira-bug/setup.json buildCmd=./gradlew <task>` (local + shared). Swapping the task without saving or reporting it is a bug (AAP857-113); stopping an `--auto` run to ask is one too (A/B pilot).
 - [ ] `<BUILD_CMD>` green before Phase 5; quote the build result.
 - [ ] Next: **read `references/phase5-verify.md`** and follow its order — Gate 1 (show the diff to the dev) BEFORE any install on a device. Skipping the file skipped Gate 1 on AIP396-475.
@@ -46,7 +46,7 @@ After it lands: **no code, no PR, NOT transitioned to Resolved.** It was claimed
 
 **Fix-11 — Investigate & fix (by the plan):** pre-fix context import (Pre-fix context block — read the SOT as ground truth via the Context-source rule: the phase digests if the background capture has landed, else the dev's provided refs) → follow the approved Fix-8 plan **verbatim** → search for the source files → implement. Plan wrong mid-fix → STOP + re-confirm, don't deviate. On clean compile, proceed to Fix-12 to build the app.
 
-**`[CLEANFIX]` — write the fix to the code-rules.** Before and while editing, follow **`references/helpers/fix-code-rules.md`** (the maintainable clean-code ruleset, `R1`–`R22`): a bug fix is **surgical** — smallest diff for the root cause (R1–R4), fix the cause not the symptom (R5–R7), match surrounding style with **no new comments** (R8–R10), respect Clean-Architecture/MVI layers + design-system + TeraKit primitives (R11–R13), introduce **no regression** (R14–R17), leave it hygienic (R18–R22). This is exactly what the Phase-5 review gate checks the diff against, so violating a rule just bounces the fix back here — write it clean the first time.
+**`[CLEANFIX]` — write the fix to the code-rules.** Before and while editing, follow **`references/helpers/fix-code-rules.md`** (the maintainable clean-code ruleset, `R1`–`R25`): a bug fix is **surgical** — smallest diff for the root cause (R1–R4), fix the cause not the symptom (R5–R7), match surrounding style with **no new comments** (R8–R10), respect Clean-Architecture/MVI layers + design-system + TeraKit primitives (R11–R13), introduce **no regression** (R14–R17), leave it hygienic (R18–R22). This is exactly what the Phase-5 review gate checks the diff against, so violating a rule just bounces the fix back here — write it clean the first time.
 
 **Fix-12 — Build the app to verify compilation, then hand off to Phase 5 (Verify).** Phase 4's done gate is a **green app build**, not just an editor/compiler check. After implementing the fix, run the `appDev`/`debug` assemble from the worktree to prove the app actually compiles **and** builds:
 ```bash

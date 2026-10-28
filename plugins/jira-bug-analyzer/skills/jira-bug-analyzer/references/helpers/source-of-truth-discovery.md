@@ -118,7 +118,7 @@ What each rung actually buys:
 |---|---|---|
 | **Detection** | full ladder | full ladder — **identical** |
 | **On a result** | **ALWAYS confirm with the dev** (below) | **never ask — self-verify instead** (below) |
-| **On NONE** | blocking paste-ask | rung trace + `no-sot` defer |
+| **On NONE** | blocking paste-ask | rung trace; per ticket: expected result from ticket / code precedent → proceed, else `no-sot` defer |
 
 ### Interactive — ALWAYS confirm the adoption, never adopt silently
 Even a STRONG, unambiguous hit is **proposed, not imposed**. Auto-detection saves the dev from *typing* the link; it does not entitle the agent to *assume* it. A wrong spec silently adopted poisons every ticket in the phase and is very hard to notice later — one cheap confirm is worth it, and it costs a single tap.
@@ -138,7 +138,7 @@ Even a STRONG, unambiguous hit is **proposed, not imposed**. Auto-detection save
 2. **Verify identity against the project + phase.** The fetched page's title/breadcrumb/body must corroborate **both** the project (key or name) **and** the phase (`@N`, or the L2e version name). Corroborated → adopt. Contradicted (e.g. the page says Phase 2) → **reject and record**, never "close enough".
 3. **Verify it is a spec, not a stub.** A page with no requirement/behavior content (a placeholder, an index page, a meeting note) fails — adopt only something that can actually answer "what was this supposed to do".
 4. **FUZZY → the deterministic auto-adopt bar below.** Bar not cleared → treat as NONE.
-5. **NONE / all candidates rejected → never ask**: record the gap in the "what's missing" report + the end-of-run report **with the rung trace** (which rungs ran, what each returned, why each candidate was rejected) and defer the affected tickets `no-sot` (`references/helpers/auto-plan-pick.md`). Discovery never stalls the auto loop.
+5. **NONE / all candidates rejected → never ask**: record the gap in the "what's missing" report + the end-of-run report **with the rung trace** (which rungs ran, what each returned, why each candidate was rejected) and hand the tickets to the per-ticket check in `references/helpers/auto-plan-pick.md` (expected result from the ticket or a code precedent → proceed; else defer `no-sot`). Discovery never stalls the auto loop.
 
 Persist the verification outcome with the entry (`"verifiedBy": "auto:page-fetch+phase-match"`), and state it in the `[VN]` line so the dev can audit the batch afterwards. **An `--auto` adoption that skipped steps 1–3 is not an adoption — it is a guess, and guessing the spec is worse than deferring.**
 
@@ -172,6 +172,6 @@ setup-json.sh merge-set <file> 'sotByPhase.phase3={"spec":"…","figma":"…","o
 
 ## What discovery returns to Phase 2
 - **resolved** — `spec` (+ `figma`, + any `otherRefs`) with tier, `detectedFrom`, and the rung trace → Phase 2 launches the background capture on them. **The links are usable context immediately** (Phase-3 Context-source rule); analysis never waits for the digest.
-- **none** — the ladder is exhausted. Interactive → the blocking paste-ask (spec+figma cannot be waived). `--auto` → **never ask**: emit the rung trace + remedy, and the affected tickets defer `no-sot`.
+- **none** — the ladder is exhausted. Interactive → the blocking paste-ask (spec+figma cannot be waived). `--auto` → **never ask**: emit the rung trace + remedy; each ticket then needs an expected-result source (ticket / code precedent) or defers `no-sot`.
 
 **Reaching `none` without having run L2d/L2e/L2f (when a phase was known) is a BUG, not a legitimate NONE** — the trace must show those sweeps actually ran and came back empty.

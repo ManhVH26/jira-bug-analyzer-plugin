@@ -44,7 +44,7 @@ Pipeline: select mode → gather context (board, ticket) → **auto-discover spe
 | `references/golden-rules.md` | A phase applies a `[TAG]` and you need its full invariant (lazy — most runs never need it). |
 | `references/google-sheet-board.md` | `[SHEET]` — the board is a Google Sheet. |
 | `references/helpers/bug-analysis-rules.md` | `[REPRO]` ruleset `A1`–`A14` (Phase-3 Fix-5.5). |
-| `references/helpers/fix-code-rules.md` | `[CLEANFIX]` ruleset `R1`–`R22` (Phase-4 Fix-11 + Phase-5 review). |
+| `references/helpers/fix-code-rules.md` | `[CLEANFIX]` ruleset `R1`–`R25` (Phase-4 Fix-11 + Phase-5 review). |
 | `references/android-ui-verify/SKILL.md` | Verifier for UI-scoped tickets (Figma diff + blast radius). |
 | `references/android-self-verify/SKILL.md` | Verifier for behavioral tickets (incl. state-change scenarios). |
 | `references/helpers/confidence-rubric.md` | The scorecard (routes the gate only under `--auto`). |
@@ -77,7 +77,7 @@ Pipeline: select mode → gather context (board, ticket) → **auto-discover spe
 | `[EVIDENCE]` | Repro/verify media attached + embedded in a Jira comment. Naming: `repro-*` / `repro-attempt-*` / `verify-*`. |
 | `[1COMMIT]` | One commit per ticket; multi/team merge with merge-commit/rebase, never `--squash`. `fix(scope): … (TICKET)`. |
 | `[REPRO]` | Device repro OFF by default — opt in via `--repro` or NL intent. Rules in `references/helpers/bug-analysis-rules.md`. |
-| `[CLEANFIX]` | Fixes follow `R1`–`R22` (surgical, cause-not-symptom, no new comments). |
+| `[CLEANFIX]` | Fixes follow `R1`–`R25` (surgical, cause-not-symptom, no new comments). |
 | `[TOKEN]` | Read-heavy drives (verify, media) run in a subagent — the main loop never Reads screenshots/XML/logs. |
 | `[MEDIA]` | human-mcp `eyes_analyze`/`eyes_compare` FIRST (path in, text out); native vision only on fallback. |
 | `[RAG]` | Read SOT by `## <anchor>` section, not whole; analyzers match ticket→anchor via `metadata.json`. |

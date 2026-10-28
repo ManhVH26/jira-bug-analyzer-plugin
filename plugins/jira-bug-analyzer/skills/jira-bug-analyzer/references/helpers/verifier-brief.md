@@ -20,11 +20,21 @@ You are the on-device verifier for <TICKET> (<one-line bug>). Follow
 - **Device:** serial `<SERIAL>`, owner token `<session-id>`. The parent holds the lock and already installed
   the fix APK. Every adb call goes through `bash <skill-dir>/assets/device-lock.sh exec <SERIAL> <session-id> -- <adb args>`.
   A bare `adb` / `adb -s` call is a bug. `NOTOWNER` → stop, report `blocked`.
+  **First command:** `source <skill-dir>/assets/dev.sh <SERIAL> <session-id>` — then one call per action: `ui` (visible texts +
+  centers), `tap_text "<text>"`, `wait_text "<text>"`, `back`, `focus`, `L <adb args>`. Do not write your own wrapper; do not
+  dump + grep + tap by hand (3 commands for what `tap_text` does in one).
 - **Package:** `<applicationId>`. **Evidence dir:** `<repo-root>/.jira-bug/evidence/<TICKET>/`; name files `verify-<what>.png|mp4`
   (and `repro-<what>…` for the before state).
 - **Target state:** <the screen + data state the bug needs>. **Code entry point:** <file:line / composable / event
   from the analysis that reaches it>. Go there by the shortest path; don't explore.
-- **Checks:** <numbered: what must be true after the fix, plus one regression check>.
-- **Budget:** ~25 commands or ~5 minutes without progress → `blocked` with where you are and what is missing.
+- **Scenarios (fixed — do not add any):** <numbered list copied from the Fix plan's "Cách kiểm chứng": each = state to reach + the
+  one thing to look at + the on-screen text to crop to; at most 3 incl. one regression check>. Running a scenario that is not on this
+  list (another font scale, another sheet, another locale "to be sure") is a bug — it is what doubled AAP857-113's verify.
+- **Screenshots: only `bash <skill-dir>/assets/shot.sh <SERIAL> <session-id> <evidence-dir>/verify-<n>-<what>.png --text "<crop text>" [--pad 120] [--width 720]`**
+  (one call = capture + crop + shrink + save; prints `SHOT=… W= H= KB= CROP=`). Read only files it wrote. No `screencap` +
+  `sips`/`ffmpeg` by hand, no re-cropping the same shot. **Image budget: 2 per scenario + 2 for navigation** — over it → stop
+  and report what you have. To find where you are, read the uiautomator text (`device-lock.sh exec … shell uiautomator dump`),
+  not a screenshot.
+- **Budget:** ~25 commands (`shot.sh` counts as one) or ~5 minutes without progress → `blocked` with where you are and what is missing.
   Never tap an ad's body (it opens a browser/store); close it with ✕/Skip or BACK. Stuck behind onboarding/ads after ~5 commands → `blocked`.
-- **Report:** per check `PASS` / `FAIL` / `NOT REACHED` with the evidence path; never claim a check you did not see.
+- **Report:** per scenario `PASS` / `FAIL` / `NOT REACHED` with the evidence path, plus `IMAGES=<n>/<budget>`; never claim a check you did not see.

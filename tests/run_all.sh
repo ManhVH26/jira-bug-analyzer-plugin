@@ -136,7 +136,29 @@ check "markdown bold becomes wiki bold" '*\\u0110\\u00e3 s\\u1eeda:*' "$log"
 check "markdown code becomes wiki monospace" "{{ic_tool_video}}" "$log"
 case "$log" in *"attachments"*"/comment "*) ok "attach happens before the comment" ;; *) bad "attach happens before the comment" ;; esac
 check "claim reports status and assignee" "JIRA_STATUS=In Progress JIRA_ASSIGNEE=dev1" "$(JENV bash "$ASSETS/jira.sh" claim T-1 2>&1 || true)"
+printf '\x89PNG\r\n\x1a\nfake' > "$JM/ev/repro-before.png"
+out="$(JENV bash "$ASSETS/jira.sh" evidence T-1 "$JM/body.txt" "$JM/ev" 2>&1 || true)"
+check "evidence attaches only repro-* media" "JIRA_ATTACHED=1/1" "$out"
+check "evidence embeds it and says ok" "EVIDENCE=ok" "$out"
+out="$(JENV bash "$ASSETS/jira.sh" finalize T-1 "$JM/body.txt" "$JM/ev" --pr https://github.com/o/r/pull/5 --labels auto-fixed,auto-fix-behavioral --auto-eval pending 2>&1 || true)"
+check "finalize merges labels and reads them back" "JIRA_LABELS=old,auto-fixed,auto-fix-behavioral" "$out"
+check "finalize posts the AUTO-FIX EVAL line" "JIRA_AUTO_EVAL=ok" "$out"
 kill "$JPID" 2>/dev/null; wait "$JPID" 2>/dev/null || true
+
+echo "shot.sh — one screenshot = capture through the lock + crop to text + shrink"
+bash "$REPO/tests/shot_fixture.sh" "$ASSETS" "$TMP/shot" > "$TMP/shot.out" 2>&1
+check "full screen is shrunk to 540 wide" "W=540 H=1200" "$(sed -n 1p "$TMP/shot.out")"
+check "--text crops to that node" "CROP=mang" "$(sed -n 2p "$TMP/shot.out")"
+check "missing text falls back to full screen and says so" "CROP=not-found" "$(sed -n 3p "$TMP/shot.out")"
+
+echo "dev.sh — one call per device action (tap by text, wait for text)"
+bash "$REPO/tests/dev_fixture.sh" "$ASSETS" "$TMP/dev" > "$TMP/dev.out" 2>&1
+check "tap_text taps the center of the matching node" "TAP=ok text=tiếp tục at 540 1330" "$(cat "$TMP/dev.out")"
+check "tap_text matches content-desc too" "TAP=ok text=Đóng at 956 757" "$(cat "$TMP/dev.out")"
+check "tap_text says when the text is absent" "TAP=NOT_FOUND text=nope" "$(cat "$TMP/dev.out")"
+check "wait_text finds visible text" "FOUND=Tiếp" "$(cat "$TMP/dev.out")"
+check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
+check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
 
 echo "fetch-media-links.sh — screenshot share links become files (offline, file:// fixtures)"
 FM="$TMP/fml"; mkdir -p "$FM/site"

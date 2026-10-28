@@ -3,7 +3,7 @@ import json, re, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 LOG = sys.argv[2]
-state = {"status": "In Progress", "worklogs": 0, "comments": {}, "attachments": []}
+state = {"status": "In Progress", "worklogs": 0, "comments": {}, "attachments": [], "labels": ["old"]}
 
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
@@ -18,6 +18,7 @@ class H(BaseHTTPRequestHandler):
         if p.endswith("/transitions"):
             to = "Resolved" if state["status"] == "In Progress" else "In Progress"
             return self.send(200, {"transitions": [{"id": "21" if to == "Resolved" else "11", "to": {"name": to}}]})
+        if "fields=labels" in p: return self.send(200, {"fields": {"labels": state["labels"]}})
         if "fields=status" in p: return self.send(200, {"fields": {"status": {"name": state["status"]}}})
         if p.endswith("/worklog"): return self.send(200, {"total": state["worklogs"]})
         if "/comment/" in p:
@@ -41,7 +42,10 @@ class H(BaseHTTPRequestHandler):
         if p.endswith("/worklog"): state["worklogs"] += 1; return self.send(201, {"id": "9" + str(state["worklogs"])})
         self.send(404, {})
     def do_PUT(self):
-        data = self.rfile.read(int(self.headers.get("Content-Length", 0))); self.note(data); self.send(204)
+        data = self.rfile.read(int(self.headers.get("Content-Length", 0))); self.note(data)
+        for op in (json.loads(data or b"{}").get("update") or {}).get("labels", []):
+            if "add" in op and op["add"] not in state["labels"]: state["labels"].append(op["add"])
+        self.send(204)
 
 srv = HTTPServer(("127.0.0.1", 0), H)
 open(sys.argv[1], "w").write(str(srv.server_address[1]))
