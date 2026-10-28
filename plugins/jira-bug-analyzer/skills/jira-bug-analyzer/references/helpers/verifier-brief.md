@@ -1,4 +1,4 @@
-# Verifier brief — the template every on-device verifier is dispatched with
+# Device brief — the template every subagent that drives the device is dispatched with (verifier, repro agent)
 
 Phase 5 fills the `<…>` slots and sends this text as the subagent prompt. Do not write a brief from
 scratch: AAP857-112's hand-written brief told the verifier to use `adb -s` and `adb install -r`, held no
