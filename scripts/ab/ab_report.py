@@ -93,7 +93,13 @@ def score(run):
     lockuse = sum(1 for c in cmds if "device-lock.sh" in c)
     bare = sum(1 for c in cmds if re.search(r"(^|[;&|(\s])adb\s", c) and "device-lock.sh" not in c and not re.search(r"adb devices|adb -s \S+ get-state$", c))
     r["device_lock_calls"], r["bare_adb_calls"] = lockuse, bare
-    r["code_review"] = any(re.search(r"review", (a.get("description", "") + a.get("subagent_type", "")), re.I) for a in agents)
+    # from the subagent records, not only the stream: a stream can be partial (see stream_partial)
+    metas = [json.load(open(x[:-6] + ".meta.json")).get("description", "") for x in subs if os.path.exists(x[:-6] + ".meta.json")]
+    r["code_review"] = any(re.search(r"review", (a.get("description", "") + a.get("subagent_type", "")), re.I) for a in agents) \
+        or any(re.search(r"review", d, re.I) for d in metas)
+    # the stream's result covers only the last session when a run restarted (or the harness re-ran the
+    # launch line): its cost/duration are then partial — flag it instead of reporting them as the run's
+    r["stream_partial"] = bool(res) and t.get("seconds", 0) > 0 and (res.get("duration_ms") or 0) / 1000 < 0.8 * t["seconds"]
     r["build_cmds"] = sorted({m for c in cmds for m in re.findall(r"gradlew\s+(?:-\S+\s+)*([:\w]*assemble\w+)", c)})
     # --- correctness vs the real fix
     repo, sha = FIX[T]
@@ -134,6 +140,6 @@ if __name__ == "__main__":
     rows = [score(d) for d in runs]
     if "--json" in sys.argv: json.dump(rows, open(sys.argv[sys.argv.index("--json") + 1], "w"), indent=1, ensure_ascii=False)
     keys = ["ticket", "version", "minutes", "cost_usd", "main_model", "tool_calls", "verifier_calls", "claimed", "ledger", "pr_created", "pr_watch",
-            "images_read", "jira_evidence_embedded", "jira_resolved", "jira_worklog", "device_lock_calls", "bare_adb_calls", "code_review", "build_cmds", "file_overlap", "deferred", "leaks"]
+            "images_read", "jira_evidence_embedded", "jira_resolved", "jira_worklog", "device_lock_calls", "bare_adb_calls", "code_review", "build_cmds", "file_overlap", "deferred", "leaks", "stream_partial"]
     for r in rows:
         print(" | ".join(f"{k}={r.get(k)}" for k in keys))
