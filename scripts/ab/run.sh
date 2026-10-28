@@ -29,10 +29,15 @@ KEEP="$SB/runs/_kept"; PROJ="${T%%-*}"; MEMC="$H/.claude/jira-bug-memory"
 [ -d "$KEEP/device-nav" ] && mkdir -p "$MEMC/device-nav" && cp -R "$KEEP/device-nav/." "$MEMC/device-nav/"
 cd "$P"
 START=$(date +%s)
-env HOME="$H" PATH="$SB/bin:$PATH" GRADLE_USER_HOME="$HOME/.gradle" ENABLE_CLAUDEAI_MCP_SERVERS=false API_TIMEOUT_MS=180000 CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
+CONN_ENV="ENABLE_CLAUDEAI_MCP_SERVERS=false"; CONN_ARGS=(--strict-mcp-config)
+if [ "$(cat "$RUN/connectors" 2>/dev/null)" = confluence-read ]; then   # setup_run.sh --connectors confluence-read
+  CONN_ENV="ENABLE_CLAUDEAI_MCP_SERVERS=true"   # + the guard hook in the sandbox settings allows only Confluence reads
+  CONN_ARGS=(--disallowedTools "$(python3 "$SB/connector-deny.py" | paste -sd, -)")
+fi
+env HOME="$H" PATH="$SB/bin:$PATH" GRADLE_USER_HOME="$HOME/.gradle" "$CONN_ENV" API_TIMEOUT_MS=180000 CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
   JBA_APK_CACHE="$SB/runs/_kept/apk" AB_GH_LOG="$RUN/gh.log" AB_GH_STATE="$RUN/gh-state" AB_REPO="AperoVN/$(basename "$P")" AB_BASE="$(cat "$RUN/branch")" \
   JIRA_URL="http://127.0.0.1:$PORT" JIRA_PERSONAL_TOKEN=sandbox-token \
-  claude -p "$PROMPT" --strict-mcp-config --mcp-config "$RUN/mcp.json" --dangerously-skip-permissions \
+  claude -p "$PROMPT" "${CONN_ARGS[@]}" --mcp-config "$RUN/mcp.json" --dangerously-skip-permissions \
   --output-format stream-json --verbose > "$RUN/stream.jsonl" 2> "$RUN/stderr.log"
 RC=$?; END=$(date +%s)
 kill "$MOCK" 2>/dev/null; wait "$MOCK" 2>/dev/null

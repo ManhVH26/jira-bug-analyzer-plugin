@@ -7,7 +7,9 @@ set -euo pipefail
 VER="$1"; T="$2"; shift 2
 SB="$(cd "$(dirname "$0")" && pwd)"; REPO_ROOT="$(cd "$SB/../.." && pwd)"
 SKILL="$REPO_ROOT/plugins/jira-bug-analyzer/skills/jira-bug-analyzer"
-while [ $# -gt 0 ]; do case "$1" in --skill) SKILL="$2"; shift 2 ;; *) echo "unknown option $1"; exit 2 ;; esac; done
+CONNECTORS=""
+while [ $# -gt 0 ]; do case "$1" in --skill) SKILL="$2"; shift 2 ;; --connectors) CONNECTORS="$2"; shift 2 ;; *) echo "unknown option $1"; exit 2 ;; esac; done
+[ -z "$CONNECTORS" ] || [ "$CONNECTORS" = confluence-read ] || { echo "--connectors: only confluence-read is supported"; exit 2; }
 [ -f "$SB/cases.json" ] || { echo "no cases.json — copy cases.example.json and fill it"; exit 2; }
 [ -f "$SB/tickets/$T/issue.json" ] || { echo "no tickets/$T/issue.json — run snapshot.py tickets $T"; exit 2; }
 read -r R FIX BR CUT < <(python3 - "$SB/cases.json" "$T" <<'PY'
@@ -62,7 +64,7 @@ cat > "$H/.gitconfig" <<G
 G
 git -C "$P" remote set-url origin "https://github.com/AperoVN/$NAME.git"
 git -C "$H/.claude/jira-bug-memory" remote set-url origin https://github.com/hung-apero/jira-bug-memory.git
-python3 - "$H" "$P" "$HOME" <<'PY'
+AB_CONNECTORS="$CONNECTORS" AB_DIR="$SB" python3 - "$H" "$P" "$HOME" <<'PY'
 import json, os, sys
 H, P, REAL = sys.argv[1:]
 d = json.load(open(os.path.join(REAL, ".claude.json")))
@@ -77,9 +79,15 @@ json.dump(keep, open(os.path.join(H, ".claude.json"), "w"), indent=1)
 deny = [f"{t}({REAL}/.claude/{d}/**)" for t in ("Read", "Edit", "Write") for d in ("projects", "skills")]
 deny += [f"{t}({REAL}/**/jira-bug-memory/**)" for t in ("Read", "Edit", "Write")]   # every real clone, not just ~/.claude's
 deny += [f"Bash(*{REAL}/*jira-bug-memory*)", f"Bash(*{REAL}/.claude/projects*)"]
-json.dump({"permissions": {"defaultMode": "bypassPermissions", "deny": deny}, "skipDangerousModePermissionPrompt": True},
-          open(os.path.join(H, ".claude/settings.json"), "w"), indent=1)
+settings = {"permissions": {"defaultMode": "bypassPermissions", "deny": deny}, "skipDangerousModePermissionPrompt": True}
+if os.environ.get("AB_CONNECTORS") == "confluence-read":
+    # real use reads specs through the claude.ai "Confluence MCP" connector, which also carries Jira tools on the
+    # REAL Jira: a PreToolUse hook (runs even under bypass) allows only the three Confluence read tools
+    guard = os.path.join(os.environ["AB_DIR"], "connector-guard.py")
+    settings["hooks"] = {"PreToolUse": [{"matcher": "mcp__claude_ai_.*", "hooks": [{"type": "command", "command": f"python3 {guard}"}]}]}
+json.dump(settings, open(os.path.join(H, ".claude/settings.json"), "w"), indent=1)
 PY
 printf '%s\n' "$T" > "$RUN/ticket"; printf '%s\n' "$VER" > "$RUN/version"; printf '%s\n' "$BR" > "$RUN/branch"; printf '%s\n' "$P" > "$RUN/project"
 printf '%s\n' "$HOME" > "$RUN/real_home"
+[ -n "$CONNECTORS" ] && printf '%s\n' "$CONNECTORS" > "$RUN/connectors"
 echo "RUN=$RUN BASE=${BASE:0:8} MEMBASE=${MEMBASE:0:8}"

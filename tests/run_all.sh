@@ -201,6 +201,14 @@ IL="$TMP/il"; mkdir -p "$IL/bin" "$IL/h"; printf '#!/bin/bash\ncase "$*" in *ins
 out="$(HOME="$IL/h" PATH="$IL/bin:$PATH" INSTALL_DEADLINE=1 bash "$ASSETS/device-lock.sh" install S9 12345678 "$IL/a.apk" 2>&1 || true)"
 check "a hung install times out and says why" "INSTALL_TIMEOUT S9 after 1s" "$out"
 
+echo "scripts/ab/connector-guard.py — sandbox with claude.ai connectors may only READ Confluence"
+G() { echo "{\"tool_name\":\"$1\"}" | python3 "$REPO/scripts/ab/connector-guard.py" 2>/dev/null; echo "rc=$?"; }
+check "a Jira tool of the connector (real Jira) is blocked" "rc=2" "$(G mcp__claude_ai_Confluence_MCP__jira_transition_issue)"
+check "a Confluence write is blocked" "rc=2" "$(G mcp__claude_ai_Confluence_MCP__confluence_update_page)"
+check "another connector is blocked" "rc=2" "$(G mcp__claude_ai_Gmail__send_message)"
+check "a Confluence read is allowed" "rc=0" "$(G mcp__claude_ai_Confluence_MCP__confluence_get_page)"
+check "the sandbox's own mock Jira is untouched" "rc=0" "$(G mcp__jira__jira_get_issue)"
+
 echo "fetch-media-links.sh — screenshot share links become files (offline, file:// fixtures)"
 FM="$TMP/fml"; mkdir -p "$FM/site"
 python3 - "$FM/site/shot.png" <<'PY'
