@@ -156,7 +156,7 @@ check "--text crops to that node" "CROP=mang" "$(sed -n 2p "$TMP/shot.out")"
 check "missing text falls back to full screen and says so" "CROP=not-found" "$(sed -n 3p "$TMP/shot.out")"
 
 echo "dev.sh — one call per device action (tap by text, wait for text)"
-bash "$REPO/tests/dev_fixture.sh" "$ASSETS" "$TMP/dev" > "$TMP/dev.out" 2>&1
+bash "$REPO/tests/dev_fixture.sh" "$ASSETS" "$TMP/dev" > "$TMP/dev.out" 2>&1 || true   # the fixture ends on an expected failure
 check "tap_text taps the center of the matching node" "TAP=ok text=tiếp tục at 540 1330" "$(cat "$TMP/dev.out")"
 check "tap_text matches content-desc too" "TAP=ok text=Đóng at 956 757" "$(cat "$TMP/dev.out")"
 check "tap_text says when the text is absent" "TAP=NOT_FOUND text=nope" "$(cat "$TMP/dev.out")"
@@ -178,6 +178,7 @@ check "nav_to replays the saved route and checks it" "NAV=ok screen=rewards hops
 check "nav_to taps the saved steps" "shell input tap 700 2250;" "$(sed -n '/NAV=ok screen=rewards/,$p' "$TMP/dev.out")"
 check "nav_to says when a screen was never mapped" "NAV=unknown screen=nowhere" "$(cat "$TMP/dev.out")"
 check "map_show lists what is known" "SCREEN rewards from=home check=text:Nhiệm vụ steps=1" "$(cat "$TMP/dev.out")"
+check "nav_home refuses NAV=ok when the app is not in the foreground" "NAV=stopped layer=foreground app=com.fg.app" "$(cat "$TMP/dev.out")"
 check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
 check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
 

@@ -185,7 +185,14 @@ nav_home() {
   if [ "$n_fo" = 0 ] && [ "$n_app" = 0 ]; then
     echo "NAV=no-recipe FO=${major:-none} (find the way once, then nav_save / nav_save_fo it)"; return 1
   fi
-  local label="none"; [ -n "$major" ] && label="$major.x"
+  local label="none" pkg; [ -n "$major" ] && label="$major.x"
+  # every step can be optional, so "no step failed" is not "the app is on screen": check the foreground app
+  # (A/B rerun AIP396-465: NAV=ok while the phone sat on the launcher — the saved launch step had not started it)
+  pkg="$( { bash "$DEV_ASSETS/app-map.sh" app "$setup" 2>/dev/null | sed -n 's/^applicationId=//p'
+            bash "$DEV_ASSETS/app-map.sh" after-fo "$setup" 2>/dev/null | sed -n 's/^launch \([^/ ]*\).*/\1/p'; } | head -1)"
+  if [ -n "$pkg" ] && ! focus | grep -q "$pkg"; then
+    echo "NAV=stopped layer=foreground app=$pkg not on screen after the recipe (launch it: launch $pkg)"; return 1
+  fi
   echo "NAV=ok fo=$label fo_steps=$n_fo app_steps=$n_app"
 }
 

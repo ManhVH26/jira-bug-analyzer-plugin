@@ -42,3 +42,7 @@ map_save screen rewards '["tap Phần thưởng"]' 'text:Nhiệm vụ' from=home
 : > "$T/taps"; nav_to rewards "$T/fo2/.jira-bug/setup.json"; tr '\n' ';' < "$T/taps"; echo
 nav_to nowhere "$T/fo2/.jira-bug/setup.json"
 map_show "$T/fo2/.jira-bug/setup.json" | tr '\n' ';'; echo
+# nav_home must not say ok when the app is not on screen
+mkdir -p "$T/fg/.jira-bug"; printf '{"project": "FG"}' > "$T/fg/.jira-bug/setup.json"
+bash "$A/app-map.sh" after-fo "$T/fg/.jira-bug/setup.json" '["launch com.fg.app/com.fg.Splash"]' >/dev/null
+nav_home "$T/fg/.jira-bug/setup.json"
