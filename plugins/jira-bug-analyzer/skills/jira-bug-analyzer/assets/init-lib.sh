@@ -193,7 +193,7 @@ PY
 jb_init_run() {
   local MODE="${1:-multi}"; shift || true
   local SELF_DIR; SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-  local ROOT="$PWD" RECHECK=0 PROJECT_KEY="" ENVREFRESH=0 SHEET_ARG=""
+  local ROOT="$PWD" RECHECK=0 PROJECT_KEY="" ENVREFRESH=0 SHEET_ARG="" AUTO=0 REPRO=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --recheck-env|--recheck) RECHECK=1 ;;
@@ -202,6 +202,9 @@ jb_init_run() {
       --project=*)  PROJECT_KEY="${1#--project=}" ;;
       --google-sheet) shift; SHEET_ARG="${1:-}" ;;   # board source = a Google Sheet (references/google-sheet-board.md)
       --google-sheet=*) SHEET_ARG="${1#--google-sheet=}" ;;
+      --auto)       AUTO=1 ;;
+      --repro)      REPRO=on ;;
+      --no-repro)   REPRO=off ;;
       -*) ;;                       # ignore unknown flags
       *)  ROOT="$1" ;;             # first non-flag = project root
     esac
@@ -424,6 +427,12 @@ PY
   printf 'BUILD_CMD_SOURCE=%s\n' "$([ -n "$BUILDCMD" ] && echo setup || echo default)"
   printf 'APK_GLOB=%s\n'      "${APKGLOB:-app/build/outputs/apk/**/debug/*.apk}"
   printf 'AUTO_SCOPE=%s\n'    "${AUTOSCOPE:-ui-only}"   # --auto fix scope (references/constants.md AUTO_SCOPE)
+  # device repro: --auto turns it on by default (A/B 28/10: without it --auto deferred 6/6 at the 90 bar,
+  # with it fixed 6/6); interactive stays off unless --repro / NL intent. --no-repro opts out.
+  if [ "$REPRO" = on ]; then printf 'REPRO_ON=true REPRO_SOURCE=flag\n'
+  elif [ "$REPRO" = off ]; then printf 'REPRO_ON=false REPRO_SOURCE=no-repro-flag\n'
+  elif [ "$AUTO" = 1 ]; then printf 'REPRO_ON=true REPRO_SOURCE=auto-default\n'
+  else printf 'REPRO_ON=false REPRO_SOURCE=default\n'; fi
   # claude -p (cron/CI) sets CLAUDE_CODE_ENTRYPOINT=sdk-*: no human wakes the session, and background agents are
   # stopped ~10 min after the turn ends -> the main session must wait for its agents in the same turn (SKILL.md).
   case "${CLAUDE_CODE_ENTRYPOINT:-}" in sdk-*) printf 'HEADLESS=1\n' ;; *) printf 'HEADLESS=0\n' ;; esac

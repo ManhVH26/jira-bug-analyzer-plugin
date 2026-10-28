@@ -46,6 +46,9 @@ Driven by AAP729 data (16–22/10/2026): `--auto` fixes were reopened 30 % (25/8
 - Device work is scripted and bounded: `assets/shot.sh` (capture through the lock, crop to on-screen text, shrink to 540–720 px, 25 s deadline + pull fallback), `assets/dev.sh` (`tap_text`, `wait_text`, `ui`, `back`, `L` — each adb call has a deadline). Verifier brief: a fixed scenario list (≤ 3) and an image budget, reported as `IMAGES=n/budget`.
 - `jira.sh evidence` posts the repro proof in one call; `jira.sh finalize --labels … --auto-eval pending` adds labels and the eval line, read back. The main session runs finalize itself.
 
+### `--auto` reproduces on device by default
+- `--auto` now implies `--repro` (threshold `AUTO_THRESHOLD_REPRO`); `--no-repro` opts out (then `AUTO_THRESHOLD_DEFAULT`). Interactive runs are unchanged (off unless `--repro` / NL intent). Init prints `REPRO_ON=… REPRO_SOURCE=…`. A/B 28/10: without repro `--auto` deferred 6/6 at the 90 bar; with it, 6/6 fixed.
+
 ### Tooling
 - `scripts/lint_skill.py`, `tests/run_all.sh` (15 checks), CI `.github/workflows/lint.yml`, `scripts/metrics.py`, `scripts/reopen_report.py`, `scripts/token_report.py`, `tests/SCENARIOS.md`.
 - `scripts/sync-from-local-skill.sh` refuses a source older than this repo and runs the tests after syncing.

@@ -40,6 +40,10 @@ out="$(CLAUDE_CODE_ENTRYPOINT=sdk-cli HOME="$TMP/home" bash "$ASSETS/init-single
 check "claude -p is headless" "HEADLESS=1" "$out"
 out="$(CLAUDE_CODE_ENTRYPOINT=cli HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$P" 2>&1)"
 check "interactive is not headless" "HEADLESS=0" "$out"
+check "interactive run: no device repro by default" "REPRO_ON=false REPRO_SOURCE=default" "$out"
+check "--auto turns device repro on" "REPRO_ON=true REPRO_SOURCE=auto-default" "$(HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$P" --auto 2>&1)"
+check "--auto --no-repro turns it off" "REPRO_ON=false REPRO_SOURCE=no-repro-flag" "$(HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$P" --auto --no-repro 2>&1)"
+check "--repro alone turns it on" "REPRO_ON=true REPRO_SOURCE=flag" "$(HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$P" --repro 2>&1)"
 
 echo "manager precheck"
 M="$TMP/mgr"; mkdir -p "$M/.jira-bug/discord-inbox"

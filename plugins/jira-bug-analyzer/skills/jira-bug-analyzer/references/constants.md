@@ -4,7 +4,7 @@ Every other file names the constant (e.g. `AUTO_THRESHOLD_DEFAULT`) and points h
 
 | Constant | Value | Used by |
 |---|---|---|
-| `AUTO_THRESHOLD_DEFAULT` | 90 | `--auto` without `--repro`: auto-approve when the confidence sum reaches this (`helpers/confidence-rubric.md`) |
+| `AUTO_THRESHOLD_DEFAULT` | 90 | `--auto --no-repro` (device repro switched off; `--auto` alone repros): auto-approve when the confidence sum reaches this (`helpers/confidence-rubric.md`) |
 | `AUTO_THRESHOLD_REPRO` | 80 | `--auto --repro` (device repro required, so the 10 repro points can count) |
 | `AUTO_THRESHOLD_LOW` | 40 | `--auto --auto-low`, always paired with `[LOW-RISK-GATE]` |
 | `RUBRIC_WEIGHTS` | 40 / 30 / 20 / 10 | single root cause / small change / KB hit / deterministic repro (`helpers/confidence-rubric.md`) |
