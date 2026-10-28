@@ -16,7 +16,7 @@ JBA_DEVICE_LOCK="$T/hang.sh" SHOT_DEADLINE=1 bash "$A/shot.sh" S TOK "$T/h.png";
 printf '{"navRecipe": ["launch com.x", "tap? Không có", "back_if Đóng", "tap Tiếp tục", "wait Tiếp"]}' > "$T/setup.json"
 : > "$T/taps"; nav_home "$T/setup.json"; cat "$T/taps"
 printf '{"navRecipe": ["tap Không có"]}' > "$T/setup2.json"; nav_home "$T/setup2.json"
-printf '{}' > "$T/setup3.json"; nav_save "$T/setup3.json" '["launch com.x","tap Tiếp tục"]'; python3 -c "import json,sys;print('SAVED', json.load(open(sys.argv[1]))['navRecipe'])" "$T/setup3.json"
+printf '{}' > "$T/setup3.json"; nav_save "$T/setup3.json" '["launch com.x","tap Tiếp tục"]'; python3 -c "import json,sys;print('SAVED', json.load(open(sys.argv[1]))['afterFirstOpen'])" "$T/app-map.json"
 # animations: switched off on source (values saved), put back by device-lock.sh release
 cat "$T/jba-anim-S" | tr '\n' ' '; echo
 mkdir -p "$T/bin"; printf '#!/bin/bash\necho "$*" >> %s/adb.log\n' "$T" > "$T/bin/adb"; chmod +x "$T/bin/adb"
@@ -33,3 +33,12 @@ printf '%s' '<hierarchy><node resource-id="com.some.app:id/buttonLanguageNext" t
 : > "$T/taps"; echo "FO_MAJOR=$(fo_major "$T/fo/.jira-bug/setup.json")"; nav_home "$T/fo/.jira-bug/setup.json"; tr '\n' ';' < "$T/taps"; echo
 mkdir -p "$T/.claude/jira-bug-memory"; nav_save_fo '["tap_id? buttonLanguageNext","repeat 2 tap_id? btnNextOnboarding"]' "$T/fo/.jira-bug/setup.json"
 python3 -c "import json,sys;d=json.load(open(sys.argv[1]));print('FO_SAVED', d['detect'], d['steps'])" "$T/.claude/jira-bug-memory/device-nav/first-open/4.x.json"
+# app map: save only when the check holds; nav_to replays home -> screen, checking every hop
+mkdir -p "$T/fo2/gradle" "$T/fo2/.jira-bug"; printf '{"project": "P1"}' > "$T/fo2/.jira-bug/setup.json"
+printf '%s' '<hierarchy><node text="Trang chủ" bounds="[0,2200][200,2300]"/><node text="Phần thưởng" bounds="[600,2200][800,2300]"/><node text="Nhiệm vụ hằng ngày" bounds="[0,300][500,400]"/></hierarchy>' > "$T/ui.xml"
+map_save screen rewards '["tap Phần thưởng"]' 'text:Không có' "$T/fo2/.jira-bug/setup.json"
+map_save screen home '[]' 'text:Trang chủ' "$T/fo2/.jira-bug/setup.json"
+map_save screen rewards '["tap Phần thưởng"]' 'text:Nhiệm vụ' from=home "$T/fo2/.jira-bug/setup.json"
+: > "$T/taps"; nav_to rewards "$T/fo2/.jira-bug/setup.json"; tr '\n' ';' < "$T/taps"; echo
+nav_to nowhere "$T/fo2/.jira-bug/setup.json"
+map_show "$T/fo2/.jira-bug/setup.json" | tr '\n' ';'; echo

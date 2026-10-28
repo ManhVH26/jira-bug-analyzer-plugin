@@ -14,6 +14,11 @@
 #                            # `navRecipe` from setup.json
 #   nav_save <setup.json> '<json array>'   # save the app's own steps after First Open (first run of a project)
 #   nav_save_fo '<json array>'             # save / fix the shared First Open steps for this FO major version
+#   map_show [setup.json]    # what is already known about this app (assets/app-map.sh, shared memory)
+#   nav_to <screen> [setup.json]           # home (FO + after-FO) then the saved route to <screen>, each hop checked
+#   state <name> [setup.json]              # build a saved data state (e.g. saved_video_word) the same way
+#   map_save screen|state <name> '<json steps>' '<check>' [from=<screen>] [setup.json]
+#                            # save how you got here; refused unless <check> (text:… | id:…) holds on screen NOW
 #
 # navRecipe steps (strings): "launch <package>", "sleep <s>", "back", "back_if <text>" (BACK only when <text> shows),
 # "tap <text>" (must exist), "tap? <text>" (optional), "wait <text>" (fail if it never shows),
@@ -168,7 +173,8 @@ nav_home() {
       || { echo "$out (fix it by hand, then nav_save_fo the steps that worked)"; return 1; }
     n_fo="$out"
   fi
-  out="$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print("\n".join(d.get("navRecipe") or []))' "$setup" 2>/dev/null | _nav_steps app)" \
+  out="$( { bash "$DEV_ASSETS/app-map.sh" after-fo "$setup" 2>/dev/null | grep . ||
+             python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print("\n".join(d.get("navRecipe") or []))' "$setup" 2>/dev/null; } | _nav_steps app)" \
     || { echo "$out"; return 1; }
   n_app="$out"
   if [ "$n_fo" = 0 ] && [ "$n_app" = 0 ]; then
@@ -189,8 +195,46 @@ nav_save_fo() {   # nav_save_fo '<json array>' [setup.json] — write the shared
   echo "NAV_SAVED_FO=$f"
 }
 
-nav_save() {
-  bash "$DEV_ASSETS/setup-json.sh" merge-set "$1" "navRecipe=$2" >/dev/null && echo "NAV_SAVED=$1"
+nav_save() {   # nav_save <setup.json> '<json array>' — the app's own steps after First Open, into the app map
+  bash "$DEV_ASSETS/app-map.sh" after-fo "$1" "$2" >/dev/null && echo "NAV_SAVED=$(bash "$DEV_ASSETS/app-map.sh" path "$1")"
 }
 
 anim_off >&2   # every session that sources dev.sh drives the device: animations off from the first call
+
+check_ok() {   # check_ok text:<visible text> | id:<view id>
+  case "$1" in
+    text:*) ui | grep -qiF -- "${1#text:}" ;;
+    id:*)   has_id "${1#id:}" ;;
+    *)      return 1 ;;
+  esac
+}
+
+map_show() { bash "$DEV_ASSETS/app-map.sh" show "${1:-.jira-bug/setup.json}"; }
+
+nav_to() {   # nav_to <screen|state> [setup.json]
+  local want="$1" setup="${2:-.jira-bug/setup.json}" hop=0 steps check out
+  out="$(bash "$DEV_ASSETS/app-map.sh" route "$setup" "$want")" || { echo "NAV=unknown screen=$want (reach it by hand, then map_save)"; return 1; }
+  local homecheck; homecheck="$(bash "$DEV_ASSETS/app-map.sh" route "$setup" home 2>/dev/null | cut -f2 | head -1)"
+  if [ -z "$homecheck" ] || ! check_ok "$homecheck"; then   # not on home (or home never mapped): go there first
+    nav_home "$setup" >/dev/null || { echo "NAV=stopped at=home (run nav_home to see where)"; return 1; }
+  fi
+  while IFS=$'\t' read -r steps check; do
+    hop=$((hop + 1))
+    python3 -c 'import json,sys;print("\n".join(json.loads(sys.argv[1])))' "$steps" | _nav_steps "$want#$hop" >/dev/null \
+      || { echo "NAV=stopped screen=$want hop=$hop (fix by hand, then map_save)"; return 1; }
+    [ -z "$check" ] || check_ok "$check" || { echo "NAV=stopped screen=$want hop=$hop check=$check (fix by hand, then map_save)"; return 1; }
+  done <<EOF
+$out
+EOF
+  echo "NAV=ok screen=$want hops=$hop"
+}
+
+state() { nav_to "$@"; }
+
+map_save() {   # map_save screen|state <name> '<json steps>' '<check>' [from=<screen>] [setup.json]
+  local kind="$1" name="$2" steps="$3" check="$4" from="from=home" setup=".jira-bug/setup.json"
+  shift 4
+  for a in "$@"; do case "$a" in from=*) from="$a" ;; *) setup="$a" ;; esac; done
+  check_ok "$check" || { echo "MAP_SAVE=refused check=$check does not hold on screen now"; return 1; }
+  bash "$DEV_ASSETS/app-map.sh" set "$setup" "$kind" "$name" "$steps" "$check" "$from"
+}

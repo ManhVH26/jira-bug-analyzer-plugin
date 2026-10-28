@@ -164,7 +164,7 @@ check "wait_text finds visible text" "FOUND=Tiếp" "$(cat "$TMP/dev.out")"
 check "nav_home replays the saved recipe" "NAV=ok fo=none fo_steps=0 app_steps=5" "$(cat "$TMP/dev.out")"
 check "nav_home taps through the recipe" "shell input tap 540 1330" "$(sed -n '/NAV=ok/,$p' "$TMP/dev.out")"
 check "a missing required step stops nav_home" "NAV=stopped layer=app step=1 (tap Không có)" "$(cat "$TMP/dev.out")"
-check "nav_save writes the recipe to setup.json" "SAVED ['launch com.x', 'tap Tiếp tục']" "$(cat "$TMP/dev.out")"
+check "nav_save writes the app's after-FO steps to the app map" "SAVED ['launch com.x', 'tap Tiếp tục']" "$(cat "$TMP/dev.out")"
 check "dev.sh switches animations off and saves the old values" "window_animation_scale=" "$(cat "$TMP/dev.out")"
 check "device-lock release puts the user's animation values back" "settings put global window_animation_scale 1.0" "$(cat "$TMP/dev.out")"
 check "an unset animation value is deleted again, not set to null" "settings delete global animator_duration_scale" "$(cat "$TMP/dev.out")"
@@ -172,6 +172,12 @@ check "the First Open version comes from the version catalog" "FO_MAJOR=4" "$(ca
 check "nav_home runs the shared First Open layer, then the app's own" "NAV=ok fo=4.x fo_steps=6 app_steps=1" "$(cat "$TMP/dev.out")"
 check "First Open buttons are tapped by view id (language picker, then onboarding)" "shell input tap 900 150;shell input tap 540 2050;" "$(cat "$TMP/dev.out")"
 check "nav_save_fo writes the shared First Open recipe for that major version" "FO_SAVED apero-inhouse:first-open 4.* ['tap_id? buttonLanguageNext', 'repeat 2 tap_id? btnNextOnboarding']" "$(cat "$TMP/dev.out")"
+check "map_save refuses a route whose check does not hold on screen" "MAP_SAVE=refused check=text:Không có" "$(cat "$TMP/dev.out")"
+check "map_save keeps a route whose check holds" "MAP_SAVED=screen:rewards" "$(cat "$TMP/dev.out")"
+check "nav_to replays the saved route and checks it" "NAV=ok screen=rewards hops=2" "$(cat "$TMP/dev.out")"
+check "nav_to taps the saved steps" "shell input tap 700 2250;" "$(sed -n '/NAV=ok screen=rewards/,$p' "$TMP/dev.out")"
+check "nav_to says when a screen was never mapped" "NAV=unknown screen=nowhere" "$(cat "$TMP/dev.out")"
+check "map_show lists what is known" "SCREEN rewards from=home check=text:Nhiệm vụ steps=1" "$(cat "$TMP/dev.out")"
 check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
 check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
 
@@ -181,6 +187,13 @@ check "a heading prints up to the next heading of its level" "$(printf '## A\na1
 out="$(bash "$ASSETS/section.sh" "$SEC" "Fix-1")"
 case "$out" in *"f1"*) case "$out" in *"f2"*) bad "a step label stops at the next step";; *) ok "a step label stops at the next step";; esac;; *) bad "a step label stops at the next step";; esac
 check "an unknown anchor lists the anchors" "SECTION_ERROR=no anchor" "$(bash "$ASSETS/section.sh" "$SEC" "zzz" || true)"
+
+echo "apk-cache.sh — one base APK per (repo, commit, task)"
+AC="$TMP/ac"; mkdir -p "$AC/repo" && git -C "$AC/repo" init -q && git -C "$AC/repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+printf 'apk' > "$AC/x.apk"
+check "a commit never built is a miss" "APK=miss" "$(JBA_APK_CACHE="$AC/c" bash "$ASSETS/apk-cache.sh" get "$AC/repo" HEAD assembleDevDebug || true)"
+check "put stores it" "APK_CACHED=" "$(JBA_APK_CACHE="$AC/c" bash "$ASSETS/apk-cache.sh" put "$AC/repo" HEAD :app:assembleDevDebug "$AC/x.apk")"
+check "the same commit and task is a hit" "APK=$AC/c/repo/" "$(JBA_APK_CACHE="$AC/c" bash "$ASSETS/apk-cache.sh" get "$AC/repo" HEAD assembleDevDebug)"
 
 echo "fetch-media-links.sh — screenshot share links become files (offline, file:// fixtures)"
 FM="$TMP/fml"; mkdir -p "$FM/site"
