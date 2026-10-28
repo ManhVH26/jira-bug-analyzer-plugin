@@ -164,6 +164,13 @@ check "wait_text finds visible text" "FOUND=Tiếp" "$(cat "$TMP/dev.out")"
 check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
 check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
 
+echo "section.sh — one section of a reference file, never the whole file"
+SEC="$TMP/sec.md"; printf '# T\n\n## A\na1\n**Fix-1 — one** x\nf1\n**Fix-2 — two** y\nf2\n## B\nb1\n' > "$SEC"
+check "a heading prints up to the next heading of its level" "$(printf '## A\na1\n**Fix-1 — one** x\nf1\n**Fix-2 — two** y\nf2')" "$(bash "$ASSETS/section.sh" "$SEC" "A")"
+out="$(bash "$ASSETS/section.sh" "$SEC" "Fix-1")"
+case "$out" in *"f1"*) case "$out" in *"f2"*) bad "a step label stops at the next step";; *) ok "a step label stops at the next step";; esac;; *) bad "a step label stops at the next step";; esac
+check "an unknown anchor lists the anchors" "SECTION_ERROR=no anchor" "$(bash "$ASSETS/section.sh" "$SEC" "zzz" || true)"
+
 echo "fetch-media-links.sh — screenshot share links become files (offline, file:// fixtures)"
 FM="$TMP/fml"; mkdir -p "$FM/site"
 python3 - "$FM/site/shot.png" <<'PY'

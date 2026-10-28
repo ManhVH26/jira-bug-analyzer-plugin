@@ -163,6 +163,12 @@ def check_phase_checklists(skill, md, r):
                 prose += 1
                 r.err("ledger-prose", f"{p}:{i} asks memory-keeper to write record_bug_status.md — use assets/ledger.sh")
     r.metrics["phase_files_without_checklist"] = missing
+    # phase files are what the main session reads whole on every run: checklist + section index only;
+    # the text lives in references/details/ and is read one section at a time (assets/section.sh)
+    for path, text in md.items():
+        p = rel(path, skill)
+        if os.path.basename(p).startswith("phase") and os.path.dirname(p) == "references" and len(text.encode()) > 6000:
+            r.err("phase-size", f"{p} is {len(text.encode())} B — keep the checklist + section index (≤ 6000 B), move text to references/details/")
     # Jira at Apero is Server/DC: /rest/api/3 does not exist there (AIP396-475 upload failed on it).
     for path, text in md.items():
         for i, line in enumerate(text.splitlines(), 1):
