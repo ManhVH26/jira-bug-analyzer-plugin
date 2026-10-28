@@ -135,6 +135,22 @@ def score(run):
         return s
     leaks = [m.group(0) for u in uses for m in [pat.search(own(json.dumps(u["input"])))] if m]
     r["leaks"] = len(leaks); r["leak_examples"] = leaks[:3]
+    # time lost to stalled API requests (infrastructure, not the skill): a gap > 2 min that ends at an
+    # api-request event in any transcript (final A/B: AAP857-113 lost 16 min, AIP396-465 ~60 min this way)
+    import datetime
+    def _ts(x): return datetime.datetime.fromisoformat(x.replace("Z", "+00:00"))
+    stall = 0
+    for f in glob.glob(os.path.join(run, "home/.claude/projects/*/*.jsonl")) + subs:
+        prev = None
+        for e in events(f):
+            ts_ = e.get("timestamp")
+            if not ts_: continue
+            if prev and e.get("type") == "api-request" and prev[1] == "api-request":
+                gap = (_ts(ts_) - prev[0]).total_seconds()
+                if gap > 120: stall += gap
+            prev = (_ts(ts_), e.get("type"))
+    r["api_stall_min"] = round(stall / 60, 1)
+    r["minutes_ex_stall"] = round(max(0.0, r["minutes"] - stall / 60), 1)
     r["final_text"] = (res.get("result") or "")[:400]
     return r
 
@@ -143,6 +159,6 @@ if __name__ == "__main__":
     rows = [score(d) for d in runs]
     if "--json" in sys.argv: json.dump(rows, open(sys.argv[sys.argv.index("--json") + 1], "w"), indent=1, ensure_ascii=False)
     keys = ["ticket", "version", "minutes", "cost_usd", "main_model", "tool_calls", "verifier_calls", "claimed", "ledger", "pr_created", "pr_watch",
-            "images_read", "jira_evidence_embedded", "jira_resolved", "jira_worklog", "device_lock_calls", "bare_adb_calls", "code_review", "build_cmds", "file_overlap", "deferred", "leaks", "stream_partial"]
+            "images_read", "jira_evidence_embedded", "jira_resolved", "jira_worklog", "device_lock_calls", "bare_adb_calls", "code_review", "build_cmds", "file_overlap", "deferred", "leaks", "stream_partial", "api_stall_min", "minutes_ex_stall"]
     for r in rows:
         print(" | ".join(f"{k}={r.get(k)}" for k in keys))
