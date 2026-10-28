@@ -51,7 +51,9 @@ def read(path):
 
 
 def skill_files(skill, exts):
-    for d, _, files in os.walk(skill):
+    for d, dirs, files in os.walk(skill):
+        # scripts/ab/runs and tickets hold sandbox copies of app repos and Jira content — not this repo's code
+        dirs[:] = [x for x in dirs if not (os.path.basename(d) == "ab" and x in ("runs", "tickets"))]
         for name in sorted(files):
             if name.endswith(exts):
                 yield os.path.join(d, name)
@@ -210,6 +212,8 @@ def check_size(skill, r):
 
 def check_shell(root, skill, r):
     scripts = list(skill_files(os.path.join(skill, "assets"), (".sh",))) + list(skill_files(os.path.join(root, "scripts"), (".sh",)))
+    ab_local = os.path.join(root, "scripts", "ab") + os.sep   # sandbox repos/homes copied into runs/ are not ours
+    scripts = [p for p in scripts if not p.startswith((ab_local + "runs" + os.sep, ab_local + "tickets" + os.sep))]
     no_strict, syntax = 0, 0
     for path in scripts:
         text = read(path)
@@ -242,7 +246,8 @@ def check_secrets(root, r):
         known = {l.split()[0] for l in read(known_path).splitlines() if l.strip() and not l.startswith("#")}
     found, new = 0, 0
     for d, dirs, files in os.walk(root):
-        dirs[:] = [x for x in dirs if x not in (".git", ".idea", "node_modules")]
+        dirs[:] = [x for x in dirs if x not in (".git", ".idea", "node_modules")
+                   and not (os.path.basename(d) == "ab" and x in ("runs", "tickets"))]   # git-ignored sandbox data
         for name in files:
             path = os.path.join(d, name)
             if path.endswith(KNOWN_SECRETS_REL) or not name.endswith((".json", ".md", ".sh", ".py", ".js", ".cjs", ".html", ".yml", ".yaml", ".env")):

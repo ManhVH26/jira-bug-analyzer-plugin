@@ -17,6 +17,9 @@ p, port, mcp = sys.argv[1:]
 d = json.load(open(p)); j = d["mcpServers"]["jira"]; j["env"]["JIRA_URL"] = f"http://127.0.0.1:{port}"
 json.dump(d, open(p, "w"), indent=1); json.dump({"mcpServers": {"jira": j}}, open(mcp, "w"), indent=1)
 PY
+# a project's local setup.json survives between tickets in real use: seed the navRecipe an earlier run saved
+REC="$SB/runs/_recipes/${T%%-*}.json"
+[ -f "$REC" ] && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["navRecipe"]=json.load(open(sys.argv[2])); json.dump(d,open(sys.argv[1],"w"),indent=2)' "$P/.jira-bug/setup.json" "$REC"
 cd "$P"
 START=$(date +%s)
 env HOME="$H" PATH="$SB/bin:$PATH" GRADLE_USER_HOME="$HOME/.gradle" ENABLE_CLAUDEAI_MCP_SERVERS=false CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
@@ -27,4 +30,6 @@ env HOME="$H" PATH="$SB/bin:$PATH" GRADLE_USER_HOME="$HOME/.gradle" ENABLE_CLAUD
 RC=$?; END=$(date +%s)
 kill "$MOCK" 2>/dev/null; wait "$MOCK" 2>/dev/null
 printf '{"rc": %s, "seconds": %s}\n' "$RC" "$((END-START))" > "$RUN/timing.json"
+mkdir -p "$SB/runs/_recipes"   # ...and keep the one this run saved for the next ticket of the project
+python3 -c 'import json,sys; r=json.load(open(sys.argv[1])).get("navRecipe"); r and json.dump(r,open(sys.argv[2],"w"),ensure_ascii=False)' "$P/.jira-bug/setup.json" "$REC" 2>/dev/null || true
 echo "RC=$RC SECONDS=$((END-START))"
