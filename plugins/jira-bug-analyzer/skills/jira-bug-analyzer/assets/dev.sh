@@ -121,7 +121,12 @@ wait_text() {
 back() { L shell input keyevent 4; }
 focus() { L shell dumpsys window | grep -m1 mCurrentFocus; }
 
-launch() { L shell monkey -p "$1" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 && echo "LAUNCH=ok $1"; }
+launch() {   # launch <package> | <package>/<activity> (what an analyzer saved in the A/B rerun)
+  case "$1" in
+    */*) L shell am start -n "$1" >/dev/null 2>&1 ;;
+    *)   L shell monkey -p "$1" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 ;;
+  esac && echo "LAUNCH=ok $1"
+}
 
 _nav_steps() {   # _nav_steps <label> — run steps from stdin; prints NAV=stopped and returns 1 on a required miss
   local label="$1" i=0 step arg n

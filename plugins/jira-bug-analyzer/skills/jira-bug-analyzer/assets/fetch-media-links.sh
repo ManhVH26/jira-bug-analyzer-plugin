@@ -16,6 +16,8 @@
 set -euo pipefail
 
 CMD="${1:-}"; TEXT="${2:-}"
+# a link or the ticket text itself instead of a file (AAP857-113 final A/B passed the URL and lost a turn)
+if [ -n "$TEXT" ] && [ ! -f "$TEXT" ]; then T2="$(mktemp)"; printf '%s\n' "$TEXT" > "$T2"; TEXT="$T2"; fi
 [ -n "$CMD" ] && [ -f "$TEXT" ] || { echo "usage: fetch-media-links.sh {list <text-file> | fetch <text-file> <out-dir>}"; exit 2; }
 # Identify honestly as this tool — never impersonate a browser to get past a site's bot protection.
 # A host that still refuses this agent gets LINK_ERROR, and the dev pastes/attaches the image instead.

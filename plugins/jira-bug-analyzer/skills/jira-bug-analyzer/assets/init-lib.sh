@@ -419,6 +419,9 @@ PY
   printf 'MEMORY=%s\n'        "$MEMORY"
   printf 'MEMORY_REPO=%s\n'   "$MEMREPO"
   printf 'MEMORY_CLONE=%s\n'  "$MEMCLONE"
+  # where it is: never search the disk for it (AAP857-113 final A/B: two `find /` calls, 3 minutes, and they
+  # found other runs' memory). Ledger rows are read with assets/ledger.sh get, not by locating the file.
+  printf 'MEMORY_DIR=%s\n' "$(bash "$SELF_DIR/memory-sync.sh" path 2>/dev/null)"
   printf 'BASEBRANCH=%s\n'    "${BASEBRANCH:-none}"
   [ -n "$BASEBRANCH_SUGGEST" ] && printf 'BASEBRANCH_SUGGEST=%s\n' "$BASEBRANCH_SUGGEST"
   # Build command + APK location per project (setup.json buildCmd/apkGlob); defaults = references/constants.md.

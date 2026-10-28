@@ -28,7 +28,7 @@ Pipeline: select mode → gather context (board, ticket) → **auto-discover spe
 | Errors | `references/helpers/troubleshooting.md` |
 
 **Entering a phase = read its file** — only the Must-do checklist + a section index (2–4 KB), every run, even when the flow feels familiar. The full text sits in `references/details/`; read ONE section when a step needs it — `bash <skill-dir>/assets/section.sh <skill-dir>/references/details/<file> "<anchor>"` — never a whole details file (it stays in context and is paid every turn). AAP857-113 read only phase1 and phase6 and so skipped the claim, the `analyzed` ledger row, Gate 1, the device lock and the pr-watch entry. The commands no run may drop:
-- Phase 3: claim (`assets/jira.sh claim` + `ledger.sh … status=analyzing`) BEFORE analyzing; `status=analyzed` after.
+- Phase 3: claim (`assets/jira.sh claim` + `ledger.sh … status=analyzing`) BEFORE analyzing; `status=analyzed` after. Ledger rows are read with `ledger.sh get`; the shared memory is at init's `MEMORY_DIR=` — never `find /` for it.
 - Phase 4: `BUILD_CMD_SOURCE=default` → `assets/build-task-check.sh` before the first build; save the answer.
 - Phase 5: Gate 1 diff shown to the dev BEFORE any install; device only via `assets/device-lock.sh`; the verifier gets `references/helpers/verifier-brief.md` filled in (serial + owner token), never a hand-written brief.
 - Phase 6: `assets/jira.sh finalize … --ledger …` — evidence embedded, Resolved, worklog, ledger `pr-created` and pr-watch in one command.
