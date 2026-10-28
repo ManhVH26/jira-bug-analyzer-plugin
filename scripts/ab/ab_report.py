@@ -22,17 +22,21 @@ def tool_uses(evs):
     # and a message can be written once per content block) -> count each tool_use id once
     seen = set()
     for d in evs:
-        m = d.get("message") or {}
-        for b in m.get("content") or [] if isinstance(m.get("content"), list) else []:
-            if b.get("type") == "tool_use" and b.get("id") not in seen:
+        m = d.get("message")
+        if not isinstance(m, dict) or not isinstance(m.get("content"), list):
+            continue   # some stream events carry a plain-string message
+        for b in m["content"]:
+            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id") not in seen:
                 seen.add(b.get("id")); yield b
 
 def images_read(evs):
     seen = set(); n = 0
     for d in evs:
-        m = d.get("message") or {}
-        for b in m.get("content") or [] if isinstance(m.get("content"), list) else []:
-            if b.get("type") == "tool_result" and b.get("tool_use_id") not in seen and isinstance(b.get("content"), list):
+        m = d.get("message")
+        if not isinstance(m, dict) or not isinstance(m.get("content"), list):
+            continue
+        for b in m["content"]:
+            if isinstance(b, dict) and b.get("type") == "tool_result" and b.get("tool_use_id") not in seen and isinstance(b.get("content"), list):
                 if any(isinstance(x, dict) and x.get("type") == "image" for x in b["content"]):
                     seen.add(b.get("tool_use_id")); n += 1
     return n
@@ -116,7 +120,11 @@ def score(run):
     # (a real clone may live anywhere under the real HOME, e.g. ~/StudioProjects/jira-bug-memory — an A/B
     #  analyzer found one there and read a KB entry written from the very fix under test)
     pat = re.compile(re.escape(real) + r"/(?:[^\s\"']*/)?(?:\.claude/(?:projects|skills)|jira-bug-memory)")
-    leaks = [m.group(0) for u in uses for m in [pat.search(json.dumps(u["input"]).replace(run, "<RUN>"))] if m]
+    here = {run, os.path.abspath(run), os.path.realpath(run)}   # the run's own files are not a leak, however spelled
+    def own(s):
+        for h in sorted(here, key=len, reverse=True): s = s.replace(h, "<RUN>")
+        return s
+    leaks = [m.group(0) for u in uses for m in [pat.search(own(json.dumps(u["input"])))] if m]
     r["leaks"] = len(leaks); r["leak_examples"] = leaks[:3]
     r["final_text"] = (res.get("result") or "")[:400]
     return r

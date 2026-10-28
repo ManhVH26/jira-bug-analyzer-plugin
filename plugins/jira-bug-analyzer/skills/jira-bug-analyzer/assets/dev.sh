@@ -36,9 +36,24 @@ L() {
   return "$rc"
 }
 
+DEV_UI_CACHE="${TMPDIR:-/tmp}/jba-ui-$DEV_SERIAL.xml"   # last dump; shot.sh --text reuses it when fresh
+
+# uiautomator dump waits for the screen to go idle, so on animated screens (onboarding, video, shimmer) every
+# dump runs into its deadline — A/B AIP396-465 lost 144 s walking onboarding and >120 s on one cropped shot.
+# Animations are switched off while this device is driven; device-lock.sh release puts the user's values back.
+anim_off() {
+  local f="${TMPDIR:-/tmp}/jba-anim-$DEV_SERIAL" k
+  [ -f "$f" ] && return 0
+  for k in window_animation_scale transition_animation_scale animator_duration_scale; do
+    printf '%s=%s\n' "$k" "$(L shell settings get global "$k" 2>/dev/null | tr -d '\r')" >> "$f"
+    L shell settings put global "$k" 0 >/dev/null 2>&1
+  done
+  echo "ANIM=off (restored on device-lock release)"
+}
+
 ui() {
   L shell uiautomator dump /sdcard/jba-ui.xml >/dev/null 2>&1
-  L exec-out cat /sdcard/jba-ui.xml 2>/dev/null | python3 -c '
+  L exec-out cat /sdcard/jba-ui.xml 2>/dev/null | tee "$DEV_UI_CACHE" | python3 -c '
 import re, sys
 for n in re.findall(r"<node [^>]*>", sys.stdin.read()):
     t = " ".join(x for x in re.findall(r"(?:text|content-desc)=\"([^\"]*)\"", n) if x)
@@ -97,3 +112,5 @@ EOF
 nav_save() {
   bash "$DEV_ASSETS/setup-json.sh" merge-set "$1" "navRecipe=$2" >/dev/null && echo "NAV_SAVED=$1"
 }
+
+anim_off >&2   # every session that sources dev.sh drives the device: animations off from the first call

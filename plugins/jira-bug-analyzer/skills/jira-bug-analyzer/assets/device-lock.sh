@@ -124,6 +124,14 @@ release() {             # release <serial> <token>
   [ -d "$lock" ] || { echo "FREE $serial"; return 0; }
   local cur; cur=$(field "$lock" owner)
   if [ "${FORCE:-0}" = "1" ] || [ "$cur" = "$token" ] || is_stale "$lock"; then
+    local anim="${TMPDIR:-/tmp}/jba-anim-$serial" k v   # dev.sh switched animations off: put the user's values back
+    if [ -f "$anim" ]; then
+      while IFS='=' read -r k v; do
+        case "$v" in ''|null) adb -s "$serial" shell settings delete global "$k" >/dev/null 2>&1 ;;
+                     *) adb -s "$serial" shell settings put global "$k" "$v" >/dev/null 2>&1 ;; esac
+      done < "$anim"
+      rm -f "$anim"; echo "ANIM=restored $serial"
+    fi
     rm -rf "$lock"; echo "RELEASED $serial"; return 0
   fi
   echo "NOTOWNER $serial held-by=$cur (use FORCE=1 to override)"; return 3

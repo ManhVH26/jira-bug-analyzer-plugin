@@ -54,9 +54,14 @@ fi
 
 CROP="none"; GEOM=""
 if [ -n "$TEXT" ]; then
-  # uiautomator dump never returns on a screen that keeps animating (video playback) -> bounded
-  deadline 15 bash "$LOCK" exec "$SERIAL" "$TOKEN" -- shell uiautomator dump /sdcard/jba-ui.xml >/dev/null 2>&1
-  deadline 10 bash "$LOCK" exec "$SERIAL" "$TOKEN" -- exec-out cat /sdcard/jba-ui.xml > "$TMP/ui.xml" 2>/dev/null
+  # reuse the dump dev.sh `ui` / `tap_text` just made (< 20 s old) — a fresh dump on an animated screen is slow
+  CACHE="${TMPDIR:-/tmp}/jba-ui-$SERIAL.xml"
+  if [ -s "$CACHE" ] && [ $(( $(date +%s) - $(stat -f %m "$CACHE" 2>/dev/null || stat -c %Y "$CACHE") )) -lt 20 ]; then
+    cp "$CACHE" "$TMP/ui.xml"
+  else  # uiautomator dump never returns on a screen that keeps animating (video playback) -> bounded
+    deadline 15 bash "$LOCK" exec "$SERIAL" "$TOKEN" -- shell uiautomator dump /sdcard/jba-ui.xml >/dev/null 2>&1
+    deadline 10 bash "$LOCK" exec "$SERIAL" "$TOKEN" -- exec-out cat /sdcard/jba-ui.xml > "$TMP/ui.xml" 2>/dev/null
+  fi
   GEOM="$(python3 - "$TMP/ui.xml" "$TEXT" "$PAD" "$TMP/full.png" <<'PY'
 import re, struct, sys
 xml, want, pad = open(sys.argv[1], errors="replace").read(), sys.argv[2].lower(), int(sys.argv[3])
