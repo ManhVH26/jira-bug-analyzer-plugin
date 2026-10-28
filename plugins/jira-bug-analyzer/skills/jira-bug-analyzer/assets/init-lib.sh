@@ -424,6 +424,9 @@ PY
   printf 'BUILD_CMD_SOURCE=%s\n' "$([ -n "$BUILDCMD" ] && echo setup || echo default)"
   printf 'APK_GLOB=%s\n'      "${APKGLOB:-app/build/outputs/apk/**/debug/*.apk}"
   printf 'AUTO_SCOPE=%s\n'    "${AUTOSCOPE:-ui-only}"   # --auto fix scope (references/constants.md AUTO_SCOPE)
+  # claude -p (cron/CI) sets CLAUDE_CODE_ENTRYPOINT=sdk-*: no human wakes the session, and background agents are
+  # stopped ~10 min after the turn ends -> the main session must wait for its agents in the same turn (SKILL.md).
+  case "${CLAUDE_CODE_ENTRYPOINT:-}" in sdk-*) printf 'HEADLESS=1\n' ;; *) printf 'HEADLESS=0\n' ;; esac
   printf 'SETUP_TYPE=%s\n'    "$SETUP_TYPE"
   if [ "$SETUP_TYPE" = "google-sheet" ]; then
     [ -n "$SHEET_ARG" ] && printf 'SHEET_URL=%s\n' "$SHEET_ARG"

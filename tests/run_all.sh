@@ -36,6 +36,10 @@ printf '{\n  "board": "AAP729",\n  "buildCmd": "./gradlew :app:assembleProdDebug
 out="$(HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$P" --project AAP729 2>&1)"
 check "build command from setup.json" "BUILD_CMD=./gradlew :app:assembleProdDebug" "$out"
 check "auto scope from setup.json" "AUTO_SCOPE=all" "$out"
+out="$(CLAUDE_CODE_ENTRYPOINT=sdk-cli HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$P" 2>&1)"
+check "claude -p is headless" "HEADLESS=1" "$out"
+out="$(CLAUDE_CODE_ENTRYPOINT=cli HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$P" 2>&1)"
+check "interactive is not headless" "HEADLESS=0" "$out"
 
 echo "manager precheck"
 M="$TMP/mgr"; mkdir -p "$M/.jira-bug/discord-inbox"
@@ -59,6 +63,12 @@ out="$(HOME="$HB" PATH="/usr/bin:/bin" JIRA_PERSONAL_TOKEN=dummy bash "$ASSETS/s
 check "setup-mcp names the missing executable" "MISSING_BIN=mcp-atlassian" "$out"
 out="$(HOME="$HB" PATH="/usr/bin:/bin" bash "$ASSETS/preflight-env.sh" --now-only "$TMP" 2>&1)"
 check "preflight blocks on the missing executable" "DEP=jira-mcp-bin TIER=now STATUS=missing" "$out"
+
+echo "preflight flags TOOLSETS that block every jira tool"
+TH="$TMP/tsh"; mkdir -p "$TH"; printf '{"mcpServers":{"jira":{"command":"sh","env":{"TOOLSETS":"jira,confluence"}}}}' > "$TH/.claude.json"
+check "old toolset names are reported" "DEP=jira-mcp-toolsets TIER=now STATUS=missing" "$(HOME="$TH" bash "$ASSETS/preflight-env.sh" --now-only "$TMP" 2>&1)"
+printf '{"mcpServers":{"jira":{"command":"sh","env":{"TOOLSETS":"all"}}}}' > "$TH/.claude.json"
+case "$(HOME="$TH" bash "$ASSETS/preflight-env.sh" --now-only "$TMP" 2>&1)" in *jira-mcp-toolsets*) bad "TOOLSETS=all passes" ;; *) ok "TOOLSETS=all passes" ;; esac
 
 echo "ledger.sh — the only writer of record_bug_status.md"
 LH="$TMP/lhome"; git init -q --bare "$TMP/mem.git"; git clone -q "$TMP/mem.git" "$LH/.claude/jira-bug-memory" 2>/dev/null
@@ -105,7 +115,7 @@ BT="$TMP/bt"; mkdir -p "$BT"
 printf '#!/bin/sh\nprintf "Build tasks\\n-----------\\napp:assembleDevDebug - Assembles DevDebug\\napp:assembleProdDebug - x\\napp:assembleDevRelease - x\\n"\n' > "$BT/gradlew"; chmod +x "$BT/gradlew"
 check "an existing task is ok" "BUILD_TASK=ok" "$(bash "$ASSETS/build-task-check.sh" "$BT" "./gradlew assembleDevDebug")"
 out="$(bash "$ASSETS/build-task-check.sh" "$BT" "./gradlew assembleAppDevDebug")"
-check "a missing task is reported with candidates" "BUILD_TASK=missing TASK=assembleAppDevDebug CANDIDATES=assembleDevDebug,assembleProdDebug" "$out"
+check "a missing task is reported with candidates" "BUILD_TASK=missing TASK=assembleAppDevDebug CANDIDATES=assembleDevDebug,assembleProdDebug SUGGEST=assembleDevDebug" "$out"
 check "no gradlew is unknown, not a failure" "BUILD_TASK=unknown" "$(bash "$ASSETS/build-task-check.sh" "$TMP" "./gradlew x")"
 check "init says where BUILD_CMD came from" "BUILD_CMD_SOURCE=default" "$(HOME="$TMP/home" bash "$ASSETS/init-single.sh" "$TMP/bt" 2>&1)"
 

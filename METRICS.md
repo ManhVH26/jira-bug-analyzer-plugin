@@ -17,7 +17,7 @@ Mỗi phase có chỉ số đo được, mốc baseline (v1.15.2, đo ngày 27/1
 | P4 | Mô tả skill (nạp vào MỌI session, kể cả không dùng skill) | 1 177 ký tự | 397 | ≤ 400 |
 | P5 | `golden-rules.md` | 34 666 byte | 27 456 byte | < baseline |
 | P7 | `Agent(...)` không ghi model | 4 | 0 | 0 |
-| P7 | Phiên chính ghim model | không | `sonnet` | có |
+| P7 | Phiên chính ghim model | không | không (đã bỏ: sonnet bỏ qua verify trong A/B) | không ghim |
 | S5 | Script không có strict mode và không ghi lý do | 8 | 0 | 0 |
 | S0 | Phát hiện bảo mật của lint (đã báo riêng chủ repo) | 2 | 2 | 0 (**tạm hoãn**) |
 

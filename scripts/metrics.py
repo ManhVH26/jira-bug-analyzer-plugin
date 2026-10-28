@@ -19,7 +19,7 @@ TARGETS = {
     "description_chars":          ("P4", "<= 400", lambda v: v <= 400),
     "golden_rules_bytes":         ("P5", "< baseline", lambda v: v < 34666),
     "agent_spawns_without_model": ("P7", "0", lambda v: v == 0),
-    "main_model_pinned":          ("P7", "true", lambda v: v is True),
+    "main_model_pinned":          ("P7", "false", lambda v: v is False),
     "scripts_without_strict_mode": ("S5", "0", lambda v: v == 0),
     "secrets_found":              ("S0", "0 (deferred)", lambda v: v == 0),
 }

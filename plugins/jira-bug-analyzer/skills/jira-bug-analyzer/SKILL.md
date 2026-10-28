@@ -2,7 +2,6 @@
 name: jira-bug-analyzer
 description: "Fix Jira/Google-Sheet Android bug tickets end to end: analyze attachments, plan, fix in a worktree, verify on device via adb, open PRs, learn into a shared GitHub memory. Modes: single (ticket key, e.g. APDF1-2251), multi (project key — pull the board), manager (--manager), team (--team); --auto runs unattended. Use when given a Jira ticket/project key, asked to fix bugs, or to run the manager."
 argument-hint: "<TICKET-KEY> (single mode) | <PROJECT-KEY> (multi mode) | --manager <PROJECT-KEY> (manager mode) | --team <PROJECT-KEY> (multi mode with team)"
-model: sonnet
 ---
 
 # Jira Bug Analyzer
@@ -33,6 +32,7 @@ Pipeline: select mode → gather context (board, ticket) → **auto-discover spe
 - Phase 4: `BUILD_CMD_SOURCE=default` → `assets/build-task-check.sh` before the first build; save the answer.
 - Phase 5: Gate 1 diff shown to the dev BEFORE any install; device only via `assets/device-lock.sh`; the verifier gets `references/helpers/verifier-brief.md` filled in (serial + owner token), never a hand-written brief.
 - Phase 6: `assets/jira.sh finalize … --ledger …` — evidence embedded, Resolved, worklog, ledger `pr-created` and pr-watch in one command.
+- `HEADLESS=1` (init output; `claude -p`, cron, CI): never end the turn while a dispatched agent is still running, and never schedule a wakeup as a fallback — `-p` stops background work ~10 min after the turn ends, which left AIP396-475 half-built in the A/B run. Wait for each agent's completion in the same turn, then continue.
 
 ## Reference files (read when)
 

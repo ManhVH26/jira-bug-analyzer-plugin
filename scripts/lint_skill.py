@@ -194,9 +194,12 @@ def check_size(skill, r):
     if desc > DESCRIPTION_MAX_CHARS:
         r.err("size", f"SKILL.md description is {desc} chars (max {DESCRIPTION_MAX_CHARS}); it loads into every session")
     m = re.search(r"^---\n(.*?)\n---", text, re.S)
+    # The main session must NOT be pinned to a smaller model: on the A/B pilot (AAP857-113, --auto) the
+    # sonnet-pinned main loop opened a PR after 59 s with no build, no device verify and no Jira finalize;
+    # the same skill on opus followed every phase. Cost is cut by pinning SUBAGENTS, not the main loop.
     r.metrics["main_model_pinned"] = bool(m and re.search(r"^model:\s*\S+", m.group(1), re.M))
-    if not r.metrics["main_model_pinned"]:
-        r.err("model", "SKILL.md frontmatter has no `model:`; the main loop then runs on whatever the user picked")
+    if r.metrics["main_model_pinned"]:
+        r.err("model", "SKILL.md frontmatter pins `model:`; the main loop must run on the user's model (A/B pilot: sonnet skipped verify)")
 
 
 def check_shell(root, skill, r):

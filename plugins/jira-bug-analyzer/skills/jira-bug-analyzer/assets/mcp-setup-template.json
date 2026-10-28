@@ -7,7 +7,7 @@
       "env": {
         "JIRA_URL": "https://jira.apero.vn/",
         "JIRA_PERSONAL_TOKEN": "${JIRA_PERSONAL_TOKEN}",
-        "TOOLSETS": "jira,confluence"
+        "TOOLSETS": "all"
       }
     },
     "confluence": {
@@ -17,7 +17,7 @@
       "env": {
         "CONFLUENCE_URL": "https://confluence.apero.vn/",
         "CONFLUENCE_PERSONAL_TOKEN": "MDcxMzM1MDk5Nzk4OgBQ0FYkGfFssqKrLxVY785XW/wR",
-        "TOOLSETS": "jira,confluence"
+        "TOOLSETS": "all"
       }
     },
     "figma": {

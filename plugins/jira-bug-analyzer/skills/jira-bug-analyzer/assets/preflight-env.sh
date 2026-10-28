@@ -92,6 +92,11 @@ if jcmd in ("npx","uvx","cmd") or shutil.which(jcmd):
     print("DEP=jira-mcp-bin TIER=now STATUS=ok")
 else:
     print("DEP=jira-mcp-bin TIER=now STATUS=missing NEEDED_AT=1 HINT=mcp-atlassian not on PATH — the jira/confluence MCP servers run it. Install: uv tool install mcp-atlassian (or pipx install mcp-atlassian), then restart Claude Code")
+# TOOLSETS with names mcp-atlassian no longer knows (the old template's "jira,confluence") makes it
+# block every tool fail-closed: the server shows "connected" with zero tools ("No matching deferred tools").
+ts=next(((s or {}).get("env",{}) or {}).get("TOOLSETS","") for k,s in servers.items() if jira.search(k)) if any(jira.search(k) for k in servers) else ""
+if ts and any(t.strip() in ("jira","confluence") for t in ts.split(",")):
+    print('DEP=jira-mcp-toolsets TIER=now STATUS=missing NEEDED_AT=1 HINT=TOOLSETS="%s" is not a toolset name in current mcp-atlassian, so it exposes no tools. Set TOOLSETS to "all" in the jira server env (~/.claude.json), then restart Claude Code' % ts)
 # REST creds: process env FIRST, then the jira server's env block.
 tok=os.environ.get("JIRA_PERSONAL_TOKEN",""); url=os.environ.get("JIRA_URL","")
 if not tok or not url:

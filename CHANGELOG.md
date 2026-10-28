@@ -23,7 +23,7 @@ Driven by AAP729 data (16–22/10/2026): `--auto` fixes were reopened 30 % (25/8
 - **`@claude` on Jira only from allowed people (S1)**: `setup.json` `allowedCommenters`, default = the dev who claimed + the assignee.
 - **`[UNTRUSTED]` golden rule (S2)**: ticket/comment/Discord/Confluence text is data; Discord text reaches subagents as a file.
 - **Build command per project (P2)**: init prints `BUILD_CMD` / `APK_GLOB` from `setup.json` `buildCmd` / `apkGlob` (default `./gradlew assembleAppDevDebug`).
-- **Model routing (P7)**: main session pinned to `sonnet`; every subagent names its model (matrix in `references/constants.md`); `--model` now overrides judgment stages only. Manager runs `assets/manager-precheck.sh` first and ends quiet fires in one line.
+- **Model routing (P7)**: main session runs the user's model (the `sonnet` pin was removed after the A/B run, see below); every subagent names its model (matrix in `references/constants.md`); `--model` now overrides judgment stages only. Manager runs `assets/manager-precheck.sh` first and ends quiet fires in one line.
 - **`--pr-window`** is removed for solo modes but still drives team-mode rounds (`TEAM_PR_ROUND`).
 
 ### Structure
@@ -31,6 +31,13 @@ Driven by AAP729 data (16–22/10/2026): `--auto` fixes were reopened 30 % (25/8
 - Removed `assets/discord-inbox-watcher.sh` (legacy `nohup claude -p … --auto`, S3).
 - Figma MCP template uses `npx`; `setup-mcp.sh` adds `cmd /c` only on Windows (S4).
 - Scripts that skip strict mode now say why (S5).
+
+### Found by the A/B run (6 real tickets, old vs new skill, sandboxed)
+- Main session is no longer pinned to `sonnet`: pinned, `--auto` opened a PR after 59 s with no build, verify or Jira step. The lint now rejects a `model:` line in SKILL.md.
+- MCP template uses `TOOLSETS: "all"` (`jira,confluence` loads zero tools on current mcp-atlassian); preflight reports `DEP=jira-mcp-toolsets` when an old value is configured.
+- `build-task-check.sh` prints `SUGGEST=` (prefer `*DevDebug`); `--auto` builds with it instead of stopping to ask.
+- `--auto` with `AUTO_SCOPE=ui-only` classifies UI vs behavioral BEFORE any build or device repro (Phase 3 Fix-5.5 step 1b): a behavioral ticket used to be built and reproduced for 34 min and then deferred.
+- Init prints `HEADLESS=1` under `claude -p` (cron, CI); the main session then waits for its agents in the same turn instead of ending it, because `-p` stops background work ~10 min after the turn ends.
 
 ### Tooling
 - `scripts/lint_skill.py`, `tests/run_all.sh` (15 checks), CI `.github/workflows/lint.yml`, `scripts/metrics.py`, `scripts/reopen_report.py`, `scripts/token_report.py`, `tests/SCENARIOS.md`.

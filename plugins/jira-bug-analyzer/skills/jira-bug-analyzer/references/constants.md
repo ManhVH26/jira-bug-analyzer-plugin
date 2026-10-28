@@ -26,7 +26,7 @@ Every other file names the constant (e.g. `AUTO_THRESHOLD_DEFAULT`) and points h
 
 ## Model matrix (P7 v1.15.3) — every subagent spawn names its model
 
-The main session runs on `sonnet` (pinned by `model:` in SKILL.md frontmatter). Every `Agent` spawn passes `model` explicitly — a spawn without one inherits the user's (often most expensive) model; `scripts/lint_skill.py` fails on an `Agent({…})` block without `model:`.
+The main session runs on the user's model — SKILL.md has NO `model:` pin. A sonnet-pinned main loop under `--auto` opened a PR in 59 s with no build, no device verify and no Jira finalize (A/B pilot, AAP857-113); the same skill on opus followed every phase. Cost is cut by the subagent pins below. Every `Agent` spawn passes `model` explicitly — a spawn without one inherits the user's (often most expensive) model; `scripts/lint_skill.py` fails on an `Agent({…})` block without `model:`.
 
 | Stage | Model | Why |
 |---|---|---|

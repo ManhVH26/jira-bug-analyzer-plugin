@@ -8,7 +8,9 @@
 #
 # Usage:   build-task-check.sh <project-root> "<BUILD_CMD>"
 # Output:  BUILD_TASK=ok TASK=<t>
-#          BUILD_TASK=missing TASK=<t> CANDIDATES=<a,b,…>   (assemble*Debug tasks the project does have)
+#          BUILD_TASK=missing TASK=<t> CANDIDATES=<a,b,…> SUGGEST=<one>
+#                    CANDIDATES = assemble*Debug tasks the project has; SUGGEST = the dev flavor's debug task
+#                    (assemble*DevDebug), else the only candidate, else assembleDebug — what --auto uses
 #          BUILD_TASK=unknown REASON=<why>                    (no gradlew / gradle itself failed)
 set -euo pipefail
 
@@ -27,5 +29,8 @@ if printf '%s\n' "$NAMES" | grep -qxF "$SHORT" || printf '%s\n' "$NAMES" | grep 
   echo "BUILD_TASK=ok TASK=$TASK"
 else
   CAND="$(printf '%s\n' "$NAMES" | grep -E '(^|:)assemble[A-Za-z0-9]*Debug$' | sed 's/^.*://' | awk '!s[$0]++' | paste -sd, -)"
-  echo "BUILD_TASK=missing TASK=$TASK CANDIDATES=${CAND:-none}"
+  SUG="$(printf '%s\n' "$CAND" | tr ',' '\n' | grep -E 'DevDebug$' | head -1)"
+  [ -z "$SUG" ] && [ "$(printf '%s\n' "$CAND" | tr ',' '\n' | grep -c .)" = 1 ] && SUG="$CAND"
+  [ -z "$SUG" ] && printf '%s\n' "$CAND" | tr ',' '\n' | grep -qx assembleDebug && SUG=assembleDebug
+  echo "BUILD_TASK=missing TASK=$TASK CANDIDATES=${CAND:-none} SUGGEST=${SUG:-none}"
 fi
