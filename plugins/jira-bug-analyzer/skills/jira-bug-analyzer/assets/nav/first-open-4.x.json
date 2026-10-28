@@ -1,12 +1,12 @@
 {
  "detect": "apero-inhouse:first-open 4.*",
- "_source": "view ids read from first-open-4.20.0.aar res/layout (fo_language_activity, fo_onboarding_fragment_1..3, fo_native_fullscreen); the same layouts ship in 4.6.2. Seed only — the shared memory copy (device-nav/first-open/4.x.json) wins once a run saves one.",
+ "_source": "view ids read from first-open 4.6.2 and 4.20.0 AARs (res/layout): buttonLanguageNext (fo_language_activity), btnNextOnboarding (fo_onboarding_fragment_1..3); the full-screen native ad (fo_native_fullscreen*.xml) is the only layout with view_overlay_gradient. Seed only — the shared memory copy (device-nav/first-open/4.x.json) wins once a run saves one.",
  "steps": [
   "sleep 3",
-  "back_if_id fo_native_fullscreen",
+  "back_if_id view_overlay_gradient",
   "tap_id? buttonLanguageNext",
-  "back_if_id fo_native_fullscreen",
+  "back_if_id view_overlay_gradient",
   "repeat 3 tap_id? btnNextOnboarding",
-  "back_if_id fo_native_fullscreen"
+  "back_if_id view_overlay_gradient"
  ]
 }

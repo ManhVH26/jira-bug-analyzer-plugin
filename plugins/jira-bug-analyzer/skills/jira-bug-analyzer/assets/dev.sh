@@ -21,7 +21,7 @@
 #
 # First Open layer: every Apero app ships apero-inhouse:first-open, whose screens are the library's own XML
 # layouts with the same view ids in every app (4.20.0: buttonLanguageNext on the language picker,
-# btnNextOnboarding on the onboarding pages, fo_native_fullscreen for the full-screen native ad). One recipe
+# btnNextOnboarding on the onboarding pages; view_overlay_gradient exists only on the full-screen native ad). One recipe
 # per FO major version, kept in the shared memory (device-nav/first-open/<major>.x.json) so every dev and
 # every app reuses it; assets/nav/ carries the seed. The app's version comes from gradle/libs.versions.toml.
 # A/B runs: every analyzer and verifier re-learned the same splash -> test ad -> 3 onboarding pages ->
