@@ -9,11 +9,21 @@
 #   back                     # BACK key
 #   focus                    # current focused activity (ad / splash / app screen)
 #   launch <package>         # start the app's launcher activity
-#   nav_home <setup.json>    # replay the project's saved `navRecipe` (splash/ad/onboarding -> home) in ONE call
-#   nav_save <setup.json> '<json array>'   # save the recipe that just worked (first run of a project)
+#   tap_id <id> [n]          # tap the node whose resource-id ends with :id/<id> (language-independent)
+#   nav_home <setup.json>    # reach the app's home in ONE call: the shared First Open layer, then the app's own
+#                            # `navRecipe` from setup.json
+#   nav_save <setup.json> '<json array>'   # save the app's own steps after First Open (first run of a project)
+#   nav_save_fo '<json array>'             # save / fix the shared First Open steps for this FO major version
 #
 # navRecipe steps (strings): "launch <package>", "sleep <s>", "back", "back_if <text>" (BACK only when <text> shows),
-# "tap <text>" (must exist), "tap? <text>" (optional), "wait <text>" (fail if it never shows).
+# "tap <text>" (must exist), "tap? <text>" (optional), "wait <text>" (fail if it never shows),
+# "tap_id <id>", "tap_id? <id>", "back_if_id <id>", "repeat <n> <step>".
+#
+# First Open layer: every Apero app ships apero-inhouse:first-open, whose screens are the library's own XML
+# layouts with the same view ids in every app (4.20.0: buttonLanguageNext on the language picker,
+# btnNextOnboarding on the onboarding pages, fo_native_fullscreen for the full-screen native ad). One recipe
+# per FO major version, kept in the shared memory (device-nav/first-open/<major>.x.json) so every dev and
+# every app reuses it; assets/nav/ carries the seed. The app's version comes from gradle/libs.versions.toml.
 # A/B runs: every analyzer and verifier re-learned the same splash -> test ad -> 3 onboarding pages ->
 # popup path, ~10 commands each, twice per ticket.
 #
@@ -62,6 +72,27 @@ for n in re.findall(r"<node [^>]*>", sys.stdin.read()):
         x1, y1, x2, y2 = map(int, b.groups()); print(f"{t!r} {(x1 + x2) // 2} {(y1 + y2) // 2}")'
 }
 
+_nodes() {   # rid<TAB>text<TAB>x<TAB>y for every node of the last dump (refresh it with ui first)
+  python3 -c '
+import re, sys
+for n in re.findall(r"<node [^>]*>", open(sys.argv[1], errors="replace").read()):
+    rid = (re.search(r"resource-id=\"([^\"]*)\"", n) or [None, ""])[1]
+    t = " ".join(x for x in re.findall(r"(?:text|content-desc)=\"([^\"]*)\"", n) if x)
+    b = re.search(r"bounds=\"\[(\d+),(\d+)\]\[(\d+),(\d+)\]\"", n)
+    if b and (rid or t):
+        x1, y1, x2, y2 = map(int, b.groups()); print(f"{rid}\t{t}\t{(x1 + x2) // 2}\t{(y1 + y2) // 2}")' "$DEV_UI_CACHE" 2>/dev/null
+}
+
+has_id() { ui >/dev/null; _nodes | awk -F'\t' -v id="$1" '$1 ~ (":id/" id "$") {f=1} END {exit !f}'; }
+
+tap_id() {
+  local id="$1" nth="${2:-1}" xy
+  ui >/dev/null
+  xy="$(_nodes | awk -F'\t' -v id="$1" -v n="$nth" '$1 ~ (":id/" id "$") {c++; if (c == n) {print $3, $4; exit}}')"
+  if [ -z "$xy" ]; then echo "TAP=NOT_FOUND id=$id"; return 1; fi
+  L shell input tap $xy && echo "TAP=ok id=$id at $xy"
+}
+
 tap_text() {
   local want="$1" nth="${2:-1}" xy
   xy="$(ui | python3 -c '
@@ -87,26 +118,75 @@ focus() { L shell dumpsys window | grep -m1 mCurrentFocus; }
 
 launch() { L shell monkey -p "$1" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 && echo "LAUNCH=ok $1"; }
 
-nav_home() {
-  local setup="$1" steps i=0 step arg
-  steps="$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print("\n".join(d.get("navRecipe") or []))' "$setup" 2>/dev/null)"
-  [ -n "$steps" ] || { echo "NAV=no-recipe (find the way once, then nav_save it)"; return 1; }
+_nav_steps() {   # _nav_steps <label> — run steps from stdin; prints NAV=stopped and returns 1 on a required miss
+  local label="$1" i=0 step arg n
   while IFS= read -r step; do
-    i=$((i + 1)); arg="${step#* }"
-    case "$step" in
-      "launch "*)  launch "$arg" >/dev/null ;;
-      "sleep "*)   sleep "$arg" ;;
-      back)        back ;;
-      "back_if "*) ui | grep -qiF -- "$arg" && back ;;
-      "tap? "*)    arg="${step#"tap? "}"; tap_text "$arg" >/dev/null || true ;;
-      "tap "*)     tap_text "$arg" >/dev/null || { echo "NAV=stopped step=$i ($step)"; return 1; } ;;
-      "wait "*)    wait_text "$arg" 20 >/dev/null || { echo "NAV=stopped step=$i ($step)"; return 1; } ;;
-      *)           echo "NAV=bad-step step=$i ($step)"; return 1 ;;
-    esac
-  done <<EOF
-$steps
-EOF
-  echo "NAV=ok steps=$i"
+    [ -n "$step" ] || continue
+    i=$((i + 1)); n=1
+    case "$step" in "repeat "*) n="${step#repeat }"; n="${n%% *}"; step="${step#repeat $n }" ;; esac
+    while [ "$n" -gt 0 ]; do
+      n=$((n - 1)); arg="${step#* }"
+      case "$step" in
+        "launch "*)     launch "$arg" >/dev/null ;;
+        "sleep "*)      sleep "$arg" ;;
+        back)           back ;;
+        "back_if "*)    ui | grep -qiF -- "$arg" && back ;;
+        "back_if_id "*) has_id "$arg" && back ;;
+        "tap? "*)       tap_text "${step#"tap? "}" >/dev/null || true ;;
+        "tap_id? "*)    tap_id "${step#"tap_id? "}" >/dev/null || true ;;
+        "tap_id "*)     tap_id "$arg" >/dev/null || { echo "NAV=stopped layer=$label step=$i ($step)"; return 1; } ;;
+        "tap "*)        tap_text "$arg" >/dev/null || { echo "NAV=stopped layer=$label step=$i ($step)"; return 1; } ;;
+        "wait "*)       wait_text "$arg" 20 >/dev/null || { echo "NAV=stopped layer=$label step=$i ($step)"; return 1; } ;;
+        *)              echo "NAV=bad-step layer=$label step=$i ($step)"; return 1 ;;
+      esac
+      sleep 1
+    done
+  done
+  echo "$i"
+}
+
+fo_major() {   # First Open major version of the project that owns <setup.json>, from the version catalog / gradle files
+  local root; root="$(cd "$(dirname "$1")/.." 2>/dev/null && pwd)"
+  grep -rhoE '(aperoFirstOpen|firstOpen)[[:space:]]*=[[:space:]]*"[0-9]+|first-open:[0-9]+' \
+    "$root/gradle/libs.versions.toml" "$root"/app/build.gradle* "$root"/build.gradle* 2>/dev/null | grep -oE '[0-9]+$' | head -1
+}
+
+fo_recipe_file() {   # shared memory first, the skill's seed second
+  local major="$1" mem
+  mem="$(bash "$DEV_ASSETS/memory-sync.sh" path 2>/dev/null)"
+  for f in "$mem/device-nav/first-open/$major.x.json" "$DEV_ASSETS/nav/first-open-$major.x.json"; do
+    [ -n "$major" ] && [ -f "$f" ] && { echo "$f"; return 0; }
+  done
+  return 1
+}
+
+nav_home() {
+  local setup="$1" major fo n_fo=0 n_app=0 out
+  major="$(fo_major "$setup")"
+  if fo="$(fo_recipe_file "$major")"; then
+    out="$(python3 -c 'import json,sys;print("\n".join(json.load(open(sys.argv[1]))["steps"]))' "$fo" | _nav_steps "first-open-$major.x")" \
+      || { echo "$out (fix it by hand, then nav_save_fo the steps that worked)"; return 1; }
+    n_fo="$out"
+  fi
+  out="$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print("\n".join(d.get("navRecipe") or []))' "$setup" 2>/dev/null | _nav_steps app)" \
+    || { echo "$out"; return 1; }
+  n_app="$out"
+  if [ "$n_fo" = 0 ] && [ "$n_app" = 0 ]; then
+    echo "NAV=no-recipe FO=${major:-none} (find the way once, then nav_save / nav_save_fo it)"; return 1
+  fi
+  local label="none"; [ -n "$major" ] && label="$major.x"
+  echo "NAV=ok fo=$label fo_steps=$n_fo app_steps=$n_app"
+}
+
+nav_save_fo() {   # nav_save_fo '<json array>' [setup.json] — write the shared FO recipe and push it in the background
+  local steps="$1" setup="${2:-.jira-bug/setup.json}" major mem f
+  major="$(fo_major "$setup")"; [ -n "$major" ] || { echo "NAV_SAVE_FO=no-first-open-version"; return 1; }
+  mem="$(bash "$DEV_ASSETS/memory-sync.sh" path 2>/dev/null)"; [ -d "$mem" ] || { echo "NAV_SAVE_FO=no-memory-clone"; return 1; }
+  f="$mem/device-nav/first-open/$major.x.json"; mkdir -p "$(dirname "$f")"
+  python3 -c 'import json,sys; json.dump({"detect": "apero-inhouse:first-open " + sys.argv[2] + ".*", "steps": json.loads(sys.argv[1])}, open(sys.argv[3], "w"), ensure_ascii=False, indent=1)' "$steps" "$major" "$f" \
+    || { echo "NAV_SAVE_FO=bad-json"; return 1; }
+  ( bash "$DEV_ASSETS/memory-sync.sh" push "$f" "device-nav: first-open $major.x recipe" >/dev/null 2>&1 & )
+  echo "NAV_SAVED_FO=$f"
 }
 
 nav_save() {

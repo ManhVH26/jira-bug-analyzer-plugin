@@ -4,7 +4,7 @@ set -u
 A="$1"; T="$2"; mkdir -p "$T"
 printf '%s' '<hierarchy><node text="Tiếp tục" bounds="[340,1261][741,1399]"/><node text="" content-desc="Đóng" bounds="[934,735][979,780]"/></hierarchy>' > "$T/ui.xml"
 printf '#!/bin/bash\nshift 4\ncase "$*" in *"cat /sdcard"*) cat %s/ui.xml;; *"input tap"*) echo "$*" >> %s/taps;; esac\n' "$T" "$T" > "$T/lock.sh"
-export JBA_DEVICE_LOCK="$T/lock.sh" TMPDIR="$T"
+export JBA_DEVICE_LOCK="$T/lock.sh" TMPDIR="$T" HOME="$T"
 . "$A/dev.sh" S TOK
 tap_text "tiếp tục"; tap_text "Đóng"; tap_text "nope"; wait_text "Tiếp" 3
 cat "$T/taps"
@@ -25,3 +25,11 @@ mkdir -p "$T/h/.claude/jira-bug-analyzer/device-locks"
 HOME="$T/h" PATH="$T/bin:$PATH" FORCE=1 bash "$A/device-lock.sh" acquire S2 12345678 60 >/dev/null 2>&1 || true
 HOME="$T/h" PATH="$T/bin:$PATH" FORCE=1 bash "$A/device-lock.sh" release S2 12345678
 cat "$T/adb.log" 2>/dev/null | tr '\n' ';'; echo
+# First Open layer: tap by the library's view id, whatever the app's package and language
+mkdir -p "$T/fo/gradle" "$T/fo/.jira-bug"
+printf '[versions]\naperoFirstOpen = "4.20.0"\n' > "$T/fo/gradle/libs.versions.toml"
+printf '{"navRecipe": ["tap? Khám phá"]}' > "$T/fo/.jira-bug/setup.json"
+printf '%s' '<hierarchy><node resource-id="com.some.app:id/buttonLanguageNext" text="Next" bounds="[800,100][1000,200]"/><node resource-id="com.some.app:id/btnNextOnboarding" text="" bounds="[400,2000][680,2100]"/></hierarchy>' > "$T/ui.xml"
+: > "$T/taps"; echo "FO_MAJOR=$(fo_major "$T/fo/.jira-bug/setup.json")"; nav_home "$T/fo/.jira-bug/setup.json"; tr '\n' ';' < "$T/taps"; echo
+mkdir -p "$T/.claude/jira-bug-memory"; nav_save_fo '["tap_id? buttonLanguageNext","repeat 2 tap_id? btnNextOnboarding"]' "$T/fo/.jira-bug/setup.json"
+python3 -c "import json,sys;d=json.load(open(sys.argv[1]));print('FO_SAVED', d['detect'], d['steps'])" "$T/.claude/jira-bug-memory/device-nav/first-open/4.x.json"

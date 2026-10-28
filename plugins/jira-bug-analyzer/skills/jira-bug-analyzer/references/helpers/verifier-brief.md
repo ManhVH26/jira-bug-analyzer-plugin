@@ -23,8 +23,10 @@ You are the on-device verifier for <TICKET> (<one-line bug>). Follow
   **First command:** `source <skill-dir>/assets/dev.sh <SERIAL> <session-id>` — then one call per action: `ui` (visible texts +
   centers), `tap_text "<text>"`, `wait_text "<text>"`, `back`, `focus`, `L <adb args>`. Do not write your own wrapper; do not
   dump + grep + tap by hand (3 commands for what `tap_text` does in one).
-  **Reaching the app's home:** `nav_home <repo-root>/.jira-bug/setup.json` (one call). `NAV=no-recipe` / `NAV=stopped` → find the way
-  once with `ui` + `tap_text`, then save it: `nav_save <repo-root>/.jira-bug/setup.json '["launch <applicationId>","back_if Ad","tap? Tiếp tục",…]'`
+  **Reaching the app's home:** `nav_home <repo-root>/.jira-bug/setup.json` (one call): first the shared First Open layer (the FO library's
+  view ids, one recipe per FO major version for every app), then the app's own steps. `NAV=stopped layer=first-open-…` → get past FO
+  by hand with `tap_id <id>` (ids from `ui`/the dump) and save the fix for every app: `nav_save_fo '[…]' <repo-root>/.jira-bug/setup.json`.
+  `NAV=no-recipe` / `NAV=stopped layer=app` → find the app's own way once with `ui` + `tap_text`, then save it: `nav_save <repo-root>/.jira-bug/setup.json '["launch <applicationId>","back_if Ad","tap? Tiếp tục",…]'`
   so every later run of this project skips the splash/ad/onboarding walk.
 - **Package:** `<applicationId>`. **Evidence dir:** `<repo-root>/.jira-bug/evidence/<TICKET>/`; name files `verify-<what>.png|mp4`
   (and `repro-<what>…` for the before state).
