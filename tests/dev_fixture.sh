@@ -12,3 +12,8 @@ cat "$T/taps"
 printf '#!/bin/bash\nsleep 20\n' > "$T/hang.sh"
 OLD="$DEV_LOCK"; DEV_LOCK="$T/hang.sh"; DEV_DEADLINE=1 L shell true 2>&1; echo "RC=$?"; DEV_LOCK="$OLD"
 JBA_DEVICE_LOCK="$T/hang.sh" SHOT_DEADLINE=1 bash "$A/shot.sh" S TOK "$T/h.png"; echo "SHOT_RC=$?"
+# nav_home replays a saved recipe; a required step that is missing stops it
+printf '{"navRecipe": ["launch com.x", "tap? Không có", "back_if Đóng", "tap Tiếp tục", "wait Tiếp"]}' > "$T/setup.json"
+: > "$T/taps"; nav_home "$T/setup.json"; cat "$T/taps"
+printf '{"navRecipe": ["tap Không có"]}' > "$T/setup2.json"; nav_home "$T/setup2.json"
+printf '{}' > "$T/setup3.json"; nav_save "$T/setup3.json" '["launch com.x","tap Tiếp tục"]'; python3 -c "import json,sys;print('SAVED', json.load(open(sys.argv[1]))['navRecipe'])" "$T/setup3.json"

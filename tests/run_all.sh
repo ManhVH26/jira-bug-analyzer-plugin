@@ -161,6 +161,10 @@ check "tap_text taps the center of the matching node" "TAP=ok text=tiếp tục 
 check "tap_text matches content-desc too" "TAP=ok text=Đóng at 956 757" "$(cat "$TMP/dev.out")"
 check "tap_text says when the text is absent" "TAP=NOT_FOUND text=nope" "$(cat "$TMP/dev.out")"
 check "wait_text finds visible text" "FOUND=Tiếp" "$(cat "$TMP/dev.out")"
+check "nav_home replays the saved recipe" "NAV=ok steps=5" "$(cat "$TMP/dev.out")"
+check "nav_home taps through the recipe" "shell input tap 540 1330" "$(sed -n '/NAV=ok/,$p' "$TMP/dev.out")"
+check "a missing required step stops nav_home" "NAV=stopped step=1 (tap Không có)" "$(cat "$TMP/dev.out")"
+check "nav_save writes the recipe to setup.json" "SAVED ['launch com.x', 'tap Tiếp tục']" "$(cat "$TMP/dev.out")"
 check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
 check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
 

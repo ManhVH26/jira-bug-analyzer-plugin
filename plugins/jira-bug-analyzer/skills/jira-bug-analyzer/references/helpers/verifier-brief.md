@@ -23,6 +23,9 @@ You are the on-device verifier for <TICKET> (<one-line bug>). Follow
   **First command:** `source <skill-dir>/assets/dev.sh <SERIAL> <session-id>` — then one call per action: `ui` (visible texts +
   centers), `tap_text "<text>"`, `wait_text "<text>"`, `back`, `focus`, `L <adb args>`. Do not write your own wrapper; do not
   dump + grep + tap by hand (3 commands for what `tap_text` does in one).
+  **Reaching the app's home:** `nav_home <repo-root>/.jira-bug/setup.json` (one call). `NAV=no-recipe` / `NAV=stopped` → find the way
+  once with `ui` + `tap_text`, then save it: `nav_save <repo-root>/.jira-bug/setup.json '["launch <applicationId>","back_if Ad","tap? Tiếp tục",…]'`
+  so every later run of this project skips the splash/ad/onboarding walk.
 - **Package:** `<applicationId>`. **Evidence dir:** `<repo-root>/.jira-bug/evidence/<TICKET>/`; name files `verify-<what>.png|mp4`
   (and `repro-<what>…` for the before state).
 - **Target state:** <the screen + data state the bug needs>. **Code entry point:** <file:line / composable / event
