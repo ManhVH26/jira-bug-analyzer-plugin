@@ -1,0 +1,4 @@
+{
+  "_comment": "Copy to cases.json (git-ignored). One entry per ticket whose real fix is merged: the repo it lives in, the fix commit (ground truth; the sandbox repo stops at its parent), the base branch, and the moment the ticket was first picked up (shared memory is rewound to it).",
+  "PROJ-123": {"repo": "~/StudioProjects/your-android-app", "fix": "abc1234", "branch": "develop", "cut": "2026-10-26 15:09"}
+}

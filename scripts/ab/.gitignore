@@ -1,0 +1,4 @@
+# local only: real ticket content, local repo paths, run output
+cases.json
+tickets/
+runs/

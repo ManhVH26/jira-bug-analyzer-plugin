@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Sandbox gh: never talks to GitHub. Fakes the calls the skill makes and logs every invocation.
+LOG="${AB_GH_LOG:-/dev/null}"; printf '%s\t%s\n' "$(date +%FT%T)" "$*" >> "$LOG"
+STATE="${AB_GH_STATE:-/tmp/ab-gh-state}"; mkdir -p "$STATE"
+REPO="${AB_REPO:-AperoVN/sandbox}"
+case "$1 $2" in
+  "auth status"|"auth token") echo "github.com: logged in as sandbox-dev"; exit 0 ;;
+  "pr create")
+    n=$(( $(ls "$STATE" | wc -l) + 900 )); url="https://github.com/$REPO/pull/$n"
+    head=$(printf '%s\n' "$@" | awk 'f{print;exit} /^(--head|-H)$/{f=1}'); head="${head:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null)}"
+    printf '%s\n' "$head" > "$STATE/$n"; echo "$url"; exit 0 ;;
+  "pr view")
+    n=$(ls "$STATE" | sort -n | tail -1); [ -z "$n" ] && { echo "no pull requests found" >&2; exit 1; }
+    j="{\"number\":$n,\"url\":\"https://github.com/$REPO/pull/$n\",\"state\":\"OPEN\",\"baseRefName\":\"${AB_BASE:-develop}\",\"headRefName\":\"$(cat "$STATE/$n")\",\"title\":\"fix\",\"comments\":[],\"reviews\":[],\"updatedAt\":\"$(date -u +%FT%TZ)\",\"mergedAt\":null}"
+    if printf '%s' "$*" | grep -q -- '-q\|--jq'; then q=$(printf '%s\n' "$@" | awk 'f{print;exit} /^(-q|--jq)$/{f=1}'); printf '%s' "$j" | python3 -c "import json,sys;d=json.load(sys.stdin);q=sys.argv[1].strip('.');print(d.get(q,'') if q else json.dumps(d))" "$q"; else echo "$j"; fi; exit 0 ;;
+  "pr list") echo "[]"; exit 0 ;;
+  "pr edit"|"pr comment"|"pr ready") echo "https://github.com/$REPO/pull/$(ls "$STATE" | sort -n | tail -1)"; exit 0 ;;
+  "repo view") echo "{\"nameWithOwner\":\"$REPO\",\"defaultBranchRef\":{\"name\":\"${AB_BASE:-develop}\"}}"; exit 0 ;;
+  "api "*) echo "[]"; exit 0 ;;
+esac
+echo "[]"; exit 0

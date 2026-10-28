@@ -264,6 +264,26 @@ def check_discord_in_core(skill, r):
     r.metrics["golden_rules_bytes"] = len(read(gr).encode()) if os.path.exists(gr) else None
 
 
+def check_ab_harness(root, r):
+    """scripts/ab is public: no user's absolute home path, and the local-data files stay git-ignored."""
+    ab = os.path.join(root, "scripts/ab")
+    if not os.path.isdir(ab):
+        return
+    for dp, dn, fn in os.walk(ab):
+        dn[:] = [d for d in dn if d not in ("runs", "tickets")]
+        for f in fn:
+            if f == "cases.json":
+                continue
+            t = read(os.path.join(dp, f))
+            m = re.search(r"/(?:Users|home)/[a-z][\w.-]+/", t)
+            if m:
+                r.err("ab-paths", f"{rel(os.path.join(dp, f), root)} carries an absolute home path ({m.group(0)}) — use ~ / $HOME")
+    gi = read(os.path.join(ab, ".gitignore")) if os.path.exists(os.path.join(ab, ".gitignore")) else ""
+    for need in ("cases.json", "tickets/", "runs/"):
+        if need not in gi:
+            r.err("ab-gitignore", f"scripts/ab/.gitignore must ignore {need} (internal ticket content / local paths)")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", action="store_true")
@@ -278,7 +298,8 @@ def main():
     for fn in (lambda: check_tags(skill, md, r), lambda: check_refs(skill, md, r), lambda: check_removed_flags(skill, md, r),
                lambda: check_constant_copies(skill, allf, r), lambda: check_build_cmd(skill, allf, r),
                lambda: check_agent_model(skill, md, r), lambda: check_phase_checklists(skill, md, r), lambda: check_versions(root, r), lambda: check_size(skill, r),
-               lambda: check_shell(root, skill, r), lambda: check_secrets(root, r), lambda: check_discord_in_core(skill, r)):
+               lambda: check_shell(root, skill, r), lambda: check_secrets(root, r), lambda: check_discord_in_core(skill, r),
+               lambda: check_ab_harness(root, r)):
         fn()
     r.metrics["lint_errors"], r.metrics["lint_warnings"] = len(r.errors), len(r.warnings)
     if a.json:
