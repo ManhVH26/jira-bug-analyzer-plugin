@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# NOTE: never edit this file while a queue is running it — bash reads scripts as it goes; an edit made
+# mid-run re-ran the claude launch line once (AAP857-113 final) and broke the tail of another run.
 # run.sh <RUN-dir> [prompt]  -> runs one headless session inside the sandbox; transcript in <RUN>/stream.jsonl
 # The sandbox: HOME=<RUN>/home (own skill copy, own memory clone, own .gitconfig redirecting GitHub URLs
 # to local bare repos), Jira = mock_jira.py on localhost, gh = bin/gh shim, no claude.ai connectors.
@@ -27,7 +29,7 @@ KEEP="$SB/runs/_kept"; PROJ="${T%%-*}"; MEMC="$H/.claude/jira-bug-memory"
 [ -d "$KEEP/device-nav" ] && mkdir -p "$MEMC/device-nav" && cp -R "$KEEP/device-nav/." "$MEMC/device-nav/"
 cd "$P"
 START=$(date +%s)
-env HOME="$H" PATH="$SB/bin:$PATH" GRADLE_USER_HOME="$HOME/.gradle" ENABLE_CLAUDEAI_MCP_SERVERS=false CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
+env HOME="$H" PATH="$SB/bin:$PATH" GRADLE_USER_HOME="$HOME/.gradle" ENABLE_CLAUDEAI_MCP_SERVERS=false API_TIMEOUT_MS=180000 CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
   JBA_APK_CACHE="$SB/runs/_kept/apk" AB_GH_LOG="$RUN/gh.log" AB_GH_STATE="$RUN/gh-state" AB_REPO="AperoVN/$(basename "$P")" AB_BASE="$(cat "$RUN/branch")" \
   JIRA_URL="http://127.0.0.1:$PORT" JIRA_PERSONAL_TOKEN=sandbox-token \
   claude -p "$PROMPT" --strict-mcp-config --mcp-config "$RUN/mcp.json" --dangerously-skip-permissions \

@@ -49,6 +49,12 @@ Driven by AAP729 data (16–22/10/2026): `--auto` fixes were reopened 30 % (25/8
 ### `--auto` reproduces on device by default
 - `--auto` now implies `--repro` (threshold `AUTO_THRESHOLD_REPRO`); `--no-repro` opts out (then `AUTO_THRESHOLD_DEFAULT`). Interactive runs are unchanged (off unless `--repro` / NL intent). Init prints `REPRO_ON=… REPRO_SOURCE=…`. A/B 28/10: without repro `--auto` deferred 6/6 at the 90 bar; with it, 6/6 fixed.
 
+### Third A/B round — final skill (6/6 fixed, 5/5 as complete as the merged fix; vs the old plugin: −43 % time, −15 % cost)
+- Scripted, bounded device work: `section.sh` (phase files = checklist + section index), animations off while driving (restored on release), last UI dump reused, `device-lock.sh install` bounded (`INSTALL_TIMEOUT`).
+- Learn once, reuse, fix when wrong: shared First Open recipe per FO version (library view ids), per-app map in the shared memory (`app-map.sh`; `dev.sh nav_to` / `state` / `map_save`, every hop checked), `nav_home` checks the app is in the foreground; `apk-cache.sh` (one base APK per commit).
+- Analysis: A15 (fix the reported flow, list look-alikes), init prints `MEMORY_DIR=` (no disk-wide search), `fetch-media-links.sh` takes a link.
+- `scripts/ab/`: the A/B harness (sandboxed runs, mock Jira, scorer with leak detection; local data git-ignored).
+
 ### Tooling
 - `scripts/lint_skill.py`, `tests/run_all.sh` (15 checks), CI `.github/workflows/lint.yml`, `scripts/metrics.py`, `scripts/reopen_report.py`, `scripts/token_report.py`, `tests/SCENARIOS.md`.
 - `scripts/sync-from-local-skill.sh` refuses a source older than this repo and runs the tests after syncing.
