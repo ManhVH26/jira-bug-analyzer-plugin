@@ -99,7 +99,10 @@ def score(run):
         or any(re.search(r"review", d, re.I) for d in metas)
     # the stream's result covers only the last session when a run restarted (or the harness re-ran the
     # launch line): its cost/duration are then partial — flag it instead of reporting them as the run's
-    r["stream_partial"] = bool(res) and t.get("seconds", 0) > 0 and (res.get("duration_ms") or 0) / 1000 < 0.8 * t["seconds"]
+    # (several result events are normal — one per turn, total_cost_usd is cumulative; a SECOND main session is not)
+    r["stream_partial"] = len(glob.glob(os.path.join(run, "home/.claude/projects/*/*.jsonl"))) > 1
+    allres = [d for d in main if d.get("type") == "result"]
+    if allres: r["cost_usd"] = round(max(x.get("total_cost_usd") or 0 for x in allres), 2)
     r["build_cmds"] = sorted({m for c in cmds for m in re.findall(r"gradlew\s+(?:-\S+\s+)*([:\w]*assemble\w+)", c)})
     # --- correctness vs the real fix
     repo, sha = FIX[T]
