@@ -196,6 +196,11 @@ check "a commit never built is a miss" "APK=miss" "$(JBA_APK_CACHE="$AC/c" bash 
 check "put stores it" "APK_CACHED=" "$(JBA_APK_CACHE="$AC/c" bash "$ASSETS/apk-cache.sh" put "$AC/repo" HEAD :app:assembleDevDebug "$AC/x.apk")"
 check "the same commit and task is a hit" "APK=$AC/c/repo/" "$(JBA_APK_CACHE="$AC/c" bash "$ASSETS/apk-cache.sh" get "$AC/repo" HEAD assembleDevDebug)"
 
+echo "device-lock.sh install — bounded (a phone can sit on an install prompt forever)"
+IL="$TMP/il"; mkdir -p "$IL/bin" "$IL/h"; printf '#!/bin/bash\ncase "$*" in *install*) sleep 20;; *) echo ok;; esac\n' > "$IL/bin/adb"; chmod +x "$IL/bin/adb"; printf 'x' > "$IL/a.apk"
+out="$(HOME="$IL/h" PATH="$IL/bin:$PATH" INSTALL_DEADLINE=1 bash "$ASSETS/device-lock.sh" install S9 12345678 "$IL/a.apk" 2>&1 || true)"
+check "a hung install times out and says why" "INSTALL_TIMEOUT S9 after 1s" "$out"
+
 echo "fetch-media-links.sh — screenshot share links become files (offline, file:// fixtures)"
 FM="$TMP/fml"; mkdir -p "$FM/site"
 python3 - "$FM/site/shot.png" <<'PY'

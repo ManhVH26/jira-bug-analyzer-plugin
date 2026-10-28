@@ -157,7 +157,20 @@ install() {             # install <serial> <token> <apk> [ttl] — acquire then 
   local apk="$3"
   local ttl="${4:-1800}"
   acquire "$serial" "$token" "$ttl" || return 3
-  adb -s "$serial" install -r -d "$apk"
+  # bounded: on a phone an install can wait forever on a device-side prompt (install-over-USB confirm,
+  # Play Protect scan). A/B rerun AAP857-113: one install on the phone ran >300 s. Timed out -> say so; the
+  # caller releases this serial and takes the next one (free-serial), or asks the dev to tap the prompt.
+  local secs="${INSTALL_DEADLINE:-120}" out; out="$(mktemp)"
+  adb -s "$serial" install -r -d "$apk" > "$out" 2>&1 & local pid=$!
+  ( sleep "$secs"; kill -9 "$pid" ) >/dev/null 2>&1 & local guard=$!
+  wait "$pid" 2>/dev/null; local rc=$?
+  kill "$guard" 2>/dev/null; wait "$guard" 2>/dev/null
+  cat "$out"; rm -f "$out"
+  if [ "$rc" -eq 137 ]; then
+    echo "INSTALL_TIMEOUT $serial after ${secs}s — the device may be showing an install / Play Protect prompt; release it and use another serial"
+    return 4
+  fi
+  [ "$rc" -eq 0 ] || return "$rc"
 }
 
 free_serial() {         # free-serial <token> [ttl] — claim + print the first unlocked connected serial
