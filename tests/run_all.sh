@@ -182,6 +182,8 @@ check "map_show lists what is known" "SCREEN rewards from=home check=text:Nhiệ
 check "nav_home refuses NAV=ok when the app is not in the foreground" "NAV=stopped layer=foreground app=com.fg.app" "$(cat "$TMP/dev.out")"
 check "the app map is kept locally in the app repo" "MAP_LOCAL=yes" "$(cat "$TMP/dev.out")"
 check "the app map path is <repo>/.jira-bug/app-map.json" "/fo2/.jira-bug/app-map.json" "$(grep MAP_PATH= "$TMP/dev.out")"
+check "a fix worktree reads and saves the main checkout's map" "MAP_FROM_WORKTREE=main" "$(cat "$TMP/dev.out")"
+check "a fix worktree gets no .jira-bug/ of its own" "WORKTREE_CLEAN=yes" "$(cat "$TMP/dev.out")"
 check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
 check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
 

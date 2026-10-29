@@ -49,3 +49,7 @@ bash "$A/app-map.sh" after-fo "$T/fg/.jira-bug/setup.json" '["launch com.fg.app/
 nav_home "$T/fg/.jira-bug/setup.json"
 # the app map lives in the app's own repo, next to setup.json, whatever the shared memory holds
 mkdir -p "$T/.claude/jira-bug-memory/project/P1"; echo "MAP_PATH=$(bash "$A/app-map.sh" path "$T/fo2/.jira-bug/setup.json")"; ls "$T/fo2/.jira-bug/app-map.json" >/dev/null && echo "MAP_LOCAL=yes"
+# the fix runs in a worktree (no .jira-bug/ there): its setup.json path still reads/writes the main checkout's map
+git init -q "$T/wtm" && git -C "$T/wtm" -c user.email=t@t -c user.name=t commit -q --allow-empty -m a && git -C "$T/wtm" worktree add -q "$T/wtf" 2>/dev/null
+bash "$A/app-map.sh" set "$T/wtf/.jira-bug/setup.json" screen saved '["tap_text Đã lưu"]' 'text:Đã lưu' >/dev/null
+bash "$A/app-map.sh" show "$T/wtm/.jira-bug/setup.json" | grep -q "SCREEN saved" && echo "MAP_FROM_WORKTREE=main"; [ -e "$T/wtf/.jira-bug" ] || echo "WORKTREE_CLEAN=yes"

@@ -21,9 +21,19 @@ set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CMD="${1:?usage: app-map.sh path/show/app/route/set/after-fo <setup.json> ...}"; SETUP="${2:?setup.json}"; shift 2
 
-FILE="$(cd "$(dirname "$SETUP")" 2>/dev/null && pwd)/app-map.json"
+# One map per app, in the MAIN checkout: Phase 4 fixes in a worktree, which has no .jira-bug/ (git-excluded), so a
+# <worktree>/.jira-bug/setup.json resolves to <main checkout>/.jira-bug/app-map.json — the verifier reads and saves the
+# same map every run does (before: the worktree path made this script exit 1 with no output, i.e. an "empty" map).
+SDIR="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$(dirname "$SETUP")")"
+D="$SDIR"; while [ ! -d "$D" ]; do D="$(dirname "$D")"; done
+TOP="$(git -C "$D" rev-parse --show-toplevel 2>/dev/null || true)"
+COMMON="$(git -C "$D" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$TOP" ] && [ "$SDIR" = "$TOP/.jira-bug" ] && [ "$(basename "$COMMON")" = .git ]; then
+  FILE="$(dirname "$COMMON")/.jira-bug/app-map.json"
+else
+  FILE="$SDIR/app-map.json"
+fi
 # local to this machine and this app: keep .jira-bug/ out of the app's commits (git-excluded, never .gitignore'd)
-COMMON="$(git -C "$(dirname "$FILE")" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
 if [ -n "$COMMON" ] && ! grep -qxF ".jira-bug/" "$COMMON/info/exclude" 2>/dev/null; then
   mkdir -p "$COMMON/info" && printf '.jira-bug/\n' >> "$COMMON/info/exclude"
 fi

@@ -23,7 +23,7 @@ You are the on-device verifier for <TICKET> (<one-line bug>). Follow
   **First command:** `source <skill-dir>/assets/dev.sh <SERIAL> <session-id>` — then one call per action: `ui` (visible texts +
   centers), `tap_text "<text>"`, `wait_text "<text>"`, `back`, `focus`, `L <adb args>`. Do not write your own wrapper; do not
   dump + grep + tap by hand (3 commands for what `tap_text` does in one).
-  **Know before you walk:** `map_show <repo-root>/.jira-bug/setup.json` lists what earlier runs learned about this app (its local map, `<repo-root>/.jira-bug/app-map.json`). Each scenario
+  **Know before you walk:** `map_show <repo-root>/.jira-bug/setup.json` lists what earlier runs learned about this app (its local map, `<repo-root>/.jira-bug/app-map.json`; `<repo-root>` = the main checkout, not the fix worktree — a worktree path still resolves to the main checkout's map). Each scenario
   names its screen — `nav_to <screen> <repo-root>/.jira-bug/setup.json` gets there in one call. A screen you had to reach by hand:
   `map_save screen <name> '[…steps from its parent…]' 'text:<what proves you are there>' [from=<parent>] <repo-root>/.jira-bug/setup.json`.
   **Reaching the app's home:** `nav_home <repo-root>/.jira-bug/setup.json` (one call): the First Open steps in the app's map (seeded on its
