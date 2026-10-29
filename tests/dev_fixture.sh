@@ -31,8 +31,9 @@ printf '[versions]\naperoFirstOpen = "4.20.0"\n' > "$T/fo/gradle/libs.versions.t
 printf '{"navRecipe": ["tap? Khám phá"]}' > "$T/fo/.jira-bug/setup.json"
 printf '%s' '<hierarchy><node resource-id="com.some.app:id/buttonLanguageNext" text="Next" bounds="[800,100][1000,200]"/><node resource-id="com.some.app:id/btnNextOnboarding" text="" bounds="[400,2000][680,2100]"/></hierarchy>' > "$T/ui.xml"
 : > "$T/taps"; echo "FO_MAJOR=$(fo_major "$T/fo/.jira-bug/setup.json")"; nav_home "$T/fo/.jira-bug/setup.json"; tr '\n' ';' < "$T/taps"; echo
-mkdir -p "$T/.claude/jira-bug-memory"; nav_save_fo '["tap_id? buttonLanguageNext","repeat 2 tap_id? btnNextOnboarding"]' "$T/fo/.jira-bug/setup.json"
-python3 -c "import json,sys;d=json.load(open(sys.argv[1]));print('FO_SAVED', d['detect'], d['steps'])" "$T/.claude/jira-bug-memory/device-nav/first-open/4.x.json"
+python3 -c "import json,sys;d=json.load(open(sys.argv[1]))['firstOpen'];print('FO_SEEDED', d['version'], len(d['steps']))" "$T/fo/.jira-bug/app-map.json"
+nav_save_fo '["tap_id? buttonLanguageNext","repeat 2 tap_id? btnNextOnboarding"]' "$T/fo/.jira-bug/setup.json"
+python3 -c "import json,sys;d=json.load(open(sys.argv[1]))['firstOpen'];print('FO_SAVED', d['version'], d['steps'])" "$T/fo/.jira-bug/app-map.json"
 # app map: save only when the check holds; nav_to replays home -> screen, checking every hop
 mkdir -p "$T/fo2/gradle" "$T/fo2/.jira-bug"; printf '{"project": "P1"}' > "$T/fo2/.jira-bug/setup.json"
 printf '%s' '<hierarchy><node text="Trang chủ" bounds="[0,2200][200,2300]"/><node text="Phần thưởng" bounds="[600,2200][800,2300]"/><node text="Nhiệm vụ hằng ngày" bounds="[0,300][500,400]"/></hierarchy>' > "$T/ui.xml"

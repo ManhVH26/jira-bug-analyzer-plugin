@@ -26,9 +26,9 @@ You are the on-device verifier for <TICKET> (<one-line bug>). Follow
   **Know before you walk:** `map_show <repo-root>/.jira-bug/setup.json` lists what earlier runs learned about this app (its local map, `<repo-root>/.jira-bug/app-map.json`). Each scenario
   names its screen — `nav_to <screen> <repo-root>/.jira-bug/setup.json` gets there in one call. A screen you had to reach by hand:
   `map_save screen <name> '[…steps from its parent…]' 'text:<what proves you are there>' [from=<parent>] <repo-root>/.jira-bug/setup.json`.
-  **Reaching the app's home:** `nav_home <repo-root>/.jira-bug/setup.json` (one call): first the shared First Open layer (the FO library's
-  view ids, one recipe per FO major version for every app), then the app's own steps. `NAV=stopped layer=first-open-…` → get past FO
-  by hand with `tap_id <id>` (ids from `ui`/the dump) and save the fix for every app: `nav_save_fo '[…]' <repo-root>/.jira-bug/setup.json`.
+  **Reaching the app's home:** `nav_home <repo-root>/.jira-bug/setup.json` (one call): the First Open steps in the app's map (seeded on its
+  first run from the FO library's view ids), then the app's own steps. `NAV=stopped layer=first-open-…` → get past FO by hand with
+  `tap_id <id>` (ids from `ui`/the dump) and save the fix into this app's map: `nav_save_fo '[…]' <repo-root>/.jira-bug/setup.json`.
   `NAV=no-recipe` / `NAV=stopped layer=app` → find the app's own way once with `ui` + `tap_text`, then save it: `nav_save <repo-root>/.jira-bug/setup.json '["launch <applicationId>","back_if Ad","tap? Tiếp tục",…]'`
   so every later run of this project skips the splash/ad/onboarding walk.
 - **Package:** `<applicationId>`. **Evidence dir:** `<repo-root>/.jira-bug/evidence/<TICKET>/`; name files `verify-<what>.png|mp4`

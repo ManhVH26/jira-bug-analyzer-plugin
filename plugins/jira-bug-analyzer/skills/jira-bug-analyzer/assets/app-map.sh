@@ -13,6 +13,7 @@
 #   app-map.sh route  <setup.json> <screen|state>           -> "steps<TAB>check" per hop, home first (exit 1: unknown)
 #   app-map.sh set    <setup.json> screen|state <name> '<json steps>' '<check>' [from=home]
 #   app-map.sh after-fo <setup.json> ['<json steps>']       -> print / set the app's own steps after First Open
+#   app-map.sh fo     <setup.json> ['<json steps>' <ver>]   -> print / set the steps that get past First Open (FO version)
 #
 # A/B (final run): per ticket the analyzer and the verifier each re-learned the way to the screen under test
 # (AIP396-475: 9 navigation commands) and looked up the app id again; nothing carried to the next ticket.
@@ -34,13 +35,14 @@ import json, os, sys, datetime
 cmd, path, args = sys.argv[1], sys.argv[2], sys.argv[3:]
 try: m = json.load(open(path))
 except Exception: m = {}
-m.setdefault("app", {}); m.setdefault("afterFirstOpen", []); m.setdefault("screens", {}); m.setdefault("states", {})
+m.setdefault("app", {}); m.setdefault("firstOpen", {}); m.setdefault("afterFirstOpen", []); m.setdefault("screens", {}); m.setdefault("states", {})
 def save():
     os.makedirs(os.path.dirname(path), exist_ok=True)
     m["updated"] = datetime.date.today().isoformat()
     json.dump(m, open(path, "w"), ensure_ascii=False, indent=1)
 if cmd == "show":
     print("APP " + " ".join(f"{k}={v}" for k, v in m["app"].items()) if m["app"] else "APP (none)")
+    if m["firstOpen"]: print(f"FIRST_OPEN v{m['firstOpen'].get('version', '?')} steps={len(m['firstOpen'].get('steps', []))}")
     print("AFTER_FO " + json.dumps(m["afterFirstOpen"], ensure_ascii=False))
     for kind in ("screens", "states"):
         for n, e in m[kind].items():
@@ -53,6 +55,12 @@ elif cmd == "app":
         save(); print("MAP_SAVED=app " + " ".join(args))
     else:
         for k, v in m["app"].items(): print(f"{k}={v}")
+elif cmd == "fo":
+    if args:
+        m["firstOpen"] = {"version": args[1] if len(args) > 1 else m["firstOpen"].get("version", ""), "steps": json.loads(args[0])}
+        save(); print("MAP_SAVED=firstOpen")
+    else:
+        print("\n".join(m["firstOpen"].get("steps", [])))
 elif cmd == "after-fo":
     if args:
         m["afterFirstOpen"] = json.loads(args[0]); save(); print("MAP_SAVED=afterFirstOpen")

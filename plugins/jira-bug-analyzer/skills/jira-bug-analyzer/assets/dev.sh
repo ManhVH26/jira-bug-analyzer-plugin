@@ -13,7 +13,7 @@
 #   nav_home <setup.json>    # reach the app's home in ONE call: the shared First Open layer, then the app's own
 #                            # `navRecipe` from setup.json
 #   nav_save <setup.json> '<json array>'   # save the app's own steps after First Open (first run of a project)
-#   nav_save_fo '<json array>'             # save / fix the shared First Open steps for this FO major version
+#   nav_save_fo '<json array>'             # save / fix this app's First Open steps (in its app map)
 #   map_show [setup.json]    # what is already known about this app (assets/app-map.sh: <repo>/.jira-bug/app-map.json)
 #   nav_to <screen> [setup.json]           # home (FO + after-FO) then the saved route to <screen>, each hop checked
 #   state <name> [setup.json]              # build a saved data state (e.g. saved_video_word) the same way
@@ -26,9 +26,9 @@
 #
 # First Open layer: every Apero app ships apero-inhouse:first-open, whose screens are the library's own XML
 # layouts with the same view ids in every app (4.20.0: buttonLanguageNext on the language picker,
-# btnNextOnboarding on the onboarding pages; view_overlay_gradient exists only on the full-screen native ad). One recipe
-# per FO major version, kept in the shared memory (device-nav/first-open/<major>.x.json) so every dev and
-# every app reuses it; assets/nav/ carries the seed. The app's version comes from gradle/libs.versions.toml.
+# btnNextOnboarding on the onboarding pages; view_overlay_gradient exists only on the full-screen native ad).
+# The steps live in the app's own map (firstOpen); on an app's first run they are seeded from assets/nav/
+# (one seed per FO major version, read from gradle/libs.versions.toml) and then kept and fixed per app.
 # A/B runs: every analyzer and verifier re-learned the same splash -> test ad -> 3 onboarding pages ->
 # popup path, ~10 commands each, twice per ticket.
 #
@@ -161,20 +161,22 @@ fo_major() {   # First Open major version of the project that owns <setup.json>,
     "$root/gradle/libs.versions.toml" "$root"/app/build.gradle* "$root"/build.gradle* 2>/dev/null | grep -oE '[0-9]+$' | head -1
 }
 
-fo_recipe_file() {   # shared memory first, the skill's seed second
-  local major="$1" mem
-  mem="$(bash "$DEV_ASSETS/memory-sync.sh" path 2>/dev/null)"
-  for f in "$mem/device-nav/first-open/$major.x.json" "$DEV_ASSETS/nav/first-open-$major.x.json"; do
-    [ -n "$major" ] && [ -f "$f" ] && { echo "$f"; return 0; }
-  done
-  return 1
+fo_steps() {   # the app map's First Open steps; first run of an app: seed them from the skill (assets/nav/) into the map
+  local setup="$1" major="$2" seed
+  if bash "$DEV_ASSETS/app-map.sh" fo "$setup" 2>/dev/null | grep -q .; then
+    bash "$DEV_ASSETS/app-map.sh" fo "$setup"; return 0
+  fi
+  seed="$DEV_ASSETS/nav/first-open-$major.x.json"
+  [ -n "$major" ] && [ -f "$seed" ] || return 1
+  bash "$DEV_ASSETS/app-map.sh" fo "$setup" "$(python3 -c 'import json,sys;print(json.dumps(json.load(open(sys.argv[1]))["steps"]))' "$seed")" "$major.x" >/dev/null
+  bash "$DEV_ASSETS/app-map.sh" fo "$setup"
 }
 
 nav_home() {
   local setup="$1" major fo n_fo=0 n_app=0 out
   major="$(fo_major "$setup")"
-  if fo="$(fo_recipe_file "$major")"; then
-    out="$(python3 -c 'import json,sys;print("\n".join(json.load(open(sys.argv[1]))["steps"]))' "$fo" | _nav_steps "first-open-$major.x")" \
+  if fo="$(fo_steps "$setup" "$major")"; then
+    out="$(printf '%s\n' "$fo" | _nav_steps "first-open-$major.x")" \
       || { echo "$out (fix it by hand, then nav_save_fo the steps that worked)"; return 1; }
     n_fo="$out"
   fi
@@ -196,15 +198,10 @@ nav_home() {
   echo "NAV=ok fo=$label fo_steps=$n_fo app_steps=$n_app"
 }
 
-nav_save_fo() {   # nav_save_fo '<json array>' [setup.json] — write the shared FO recipe and push it in the background
-  local steps="$1" setup="${2:-.jira-bug/setup.json}" major mem f
-  major="$(fo_major "$setup")"; [ -n "$major" ] || { echo "NAV_SAVE_FO=no-first-open-version"; return 1; }
-  mem="$(bash "$DEV_ASSETS/memory-sync.sh" path 2>/dev/null)"; [ -d "$mem" ] || { echo "NAV_SAVE_FO=no-memory-clone"; return 1; }
-  f="$mem/device-nav/first-open/$major.x.json"; mkdir -p "$(dirname "$f")"
-  python3 -c 'import json,sys; json.dump({"detect": "apero-inhouse:first-open " + sys.argv[2] + ".*", "steps": json.loads(sys.argv[1])}, open(sys.argv[3], "w"), ensure_ascii=False, indent=1)' "$steps" "$major" "$f" \
-    || { echo "NAV_SAVE_FO=bad-json"; return 1; }
-  ( bash "$DEV_ASSETS/memory-sync.sh" push "$f" "device-nav: first-open $major.x recipe" >/dev/null 2>&1 & )
-  echo "NAV_SAVED_FO=$f"
+nav_save_fo() {   # nav_save_fo '<json array>' [setup.json] — the steps that got past First Open, into this app's map
+  local steps="$1" setup="${2:-.jira-bug/setup.json}" major
+  major="$(fo_major "$setup")"
+  bash "$DEV_ASSETS/app-map.sh" fo "$setup" "$steps" "${major:+$major.x}" >/dev/null && echo "NAV_SAVED_FO=$(bash "$DEV_ASSETS/app-map.sh" path "$setup")"
 }
 
 nav_save() {   # nav_save <setup.json> '<json array>' — the app's own steps after First Open, into the app map
