@@ -11,7 +11,9 @@ if [ "${1:-}" = "--queue" ]; then
 fi
 RUN="$(cd "$1" && pwd)"; SB="$(cd "$(dirname "$0")" && pwd)"; H="$RUN/home"; P="$(cat "$RUN/project")"; T="$(cat "$RUN/ticket")"
 DEF="/jira-bug-analyzer $T --auto"; [ -f "$RUN/prompt" ] && DEF="$(cat "$RUN/prompt")"; PROMPT="${2:-$DEF}"
-rm -f "$RUN/port"; python3 "$SB/mock_jira.py" "$SB/tickets" "$RUN/port" "$RUN/jira.jsonl" & MOCK=$!
+rm -f "$RUN/port"
+TK="$SB/tickets"; [ -d "$RUN/tickets" ] && TK="$RUN/tickets"   # setup_run.sh --desc: this run's own ticket text
+python3 "$SB/mock_jira.py" "$TK" "$RUN/port" "$RUN/jira.jsonl" & MOCK=$!
 for _ in $(seq 1 30); do [ -s "$RUN/port" ] && break; sleep 0.2; done; PORT="$(cat "$RUN/port")"
 python3 - "$H/.claude.json" "$PORT" "$RUN/mcp.json" <<'PY'
 import json, sys
@@ -25,7 +27,9 @@ REC="$SB/runs/_recipes/${T%%-*}.json"
 # in real use the app's local map (<repo>/.jira-bug/app-map.json, First Open steps included) and the local APK
 # cache persist between tickets: carry what earlier runs of the same project learned into this run
 KEEP="$SB/runs/_kept"; PROJ="${T%%-*}"; MEMC="$H/.claude/jira-bug-memory"
-[ -f "$KEEP/app-map/$PROJ.json" ] && cp "$KEEP/app-map/$PROJ.json" "$P/.jira-bug/app-map.json"   # the app's local map persists in real use
+MAPFROM="$(cat "$RUN/map_from" 2>/dev/null || true)"   # setup_run.sh --map-from: a fixed starting map, nothing saved back
+if [ -n "$MAPFROM" ]; then cp "$MAPFROM" "$P/.jira-bug/app-map.json"
+else [ -f "$KEEP/app-map/$PROJ.json" ] && cp "$KEEP/app-map/$PROJ.json" "$P/.jira-bug/app-map.json"; fi   # the app's local map persists in real use
 cd "$P"
 START=$(date +%s)
 CONN_ENV="ENABLE_CLAUDEAI_MCP_SERVERS=false"; CONN_ARGS=(--strict-mcp-config)
@@ -42,7 +46,7 @@ RC=$?; END=$(date +%s)
 kill "$MOCK" 2>/dev/null; wait "$MOCK" 2>/dev/null
 printf '{"rc": %s, "seconds": %s}\n' "$RC" "$((END-START))" > "$RUN/timing.json"
 mkdir -p "$KEEP/app-map"   # ...and keep what this run learned for the next ticket
-[ -f "$P/.jira-bug/app-map.json" ] && cp "$P/.jira-bug/app-map.json" "$KEEP/app-map/$PROJ.json"
+[ -z "$MAPFROM" ] && [ -f "$P/.jira-bug/app-map.json" ] && cp "$P/.jira-bug/app-map.json" "$KEEP/app-map/$PROJ.json"
 mkdir -p "$SB/runs/_recipes"
 python3 -c 'import json,sys; r=json.load(open(sys.argv[1])).get("navRecipe"); r and json.dump(r,open(sys.argv[2],"w"),ensure_ascii=False)' "$P/.jira-bug/setup.json" "$REC" 2>/dev/null || true
 echo "RC=$RC SECONDS=$((END-START))"

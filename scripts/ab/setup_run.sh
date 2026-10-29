@@ -2,13 +2,17 @@
 # setup_run.sh <variant> <TICKET> [--skill <dir>]  -> builds an isolated run dir runs/<TICKET>-<variant>; prints RUN=<dir>
 #   --skill   the skill folder to test (default: this repo's plugins/jira-bug-analyzer/skills/jira-bug-analyzer);
 #             pass an older copy to get the "before" side of an A/B
+#   --desc    a file whose text replaces the ticket's description in this run's Jira mock (the same ticket written
+#             differently by QA — e.g. to the QA template, or half of it); attachments and comments stay
+#   --map-from  start from this app map and do not save what the run learns back to runs/_kept (runs that are
+#             compared with each other then all start from the same map, whatever order they run in)
 # Needs cases.json (copy cases.example.json) and tickets/<TICKET>/issue.json (snapshot.py).
 set -euo pipefail
 VER="$1"; T="$2"; shift 2
 SB="$(cd "$(dirname "$0")" && pwd)"; REPO_ROOT="$(cd "$SB/../.." && pwd)"
 SKILL="$REPO_ROOT/plugins/jira-bug-analyzer/skills/jira-bug-analyzer"
-CONNECTORS=""
-while [ $# -gt 0 ]; do case "$1" in --skill) SKILL="$2"; shift 2 ;; --connectors) CONNECTORS="$2"; shift 2 ;; *) echo "unknown option $1"; exit 2 ;; esac; done
+CONNECTORS=""; DESC=""; MAPFROM=""
+while [ $# -gt 0 ]; do case "$1" in --skill) SKILL="$2"; shift 2 ;; --connectors) CONNECTORS="$2"; shift 2 ;; --desc) DESC="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2 ;; --map-from) MAPFROM="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2 ;; *) echo "unknown option $1"; exit 2 ;; esac; done
 [ -z "$CONNECTORS" ] || [ "$CONNECTORS" = confluence-read ] || { echo "--connectors: only confluence-read is supported"; exit 2; }
 [ -f "$SB/cases.json" ] || { echo "no cases.json — copy cases.example.json and fill it"; exit 2; }
 [ -f "$SB/tickets/$T/issue.json" ] || { echo "no tickets/$T/issue.json — run snapshot.py tickets $T"; exit 2; }
@@ -90,4 +94,15 @@ PY
 printf '%s\n' "$T" > "$RUN/ticket"; printf '%s\n' "$VER" > "$RUN/version"; printf '%s\n' "$BR" > "$RUN/branch"; printf '%s\n' "$P" > "$RUN/project"
 printf '%s\n' "$HOME" > "$RUN/real_home"
 [ -n "$CONNECTORS" ] && printf '%s\n' "$CONNECTORS" > "$RUN/connectors"
+if [ -n "$DESC" ]; then   # run.sh serves $RUN/tickets instead of tickets/ when it exists
+  mkdir -p "$RUN/tickets/$T"; ln -s "$SB/tickets/$T/attachments" "$RUN/tickets/$T/attachments" 2>/dev/null || true
+  python3 - "$SB/tickets/$T/issue.json" "$DESC" "$RUN/tickets/$T/issue.json" <<'PY'
+import json, sys
+src, desc, dst = sys.argv[1:]
+d = json.load(open(src)); f = d.get("fields", d); f["description"] = open(desc, encoding="utf-8").read().strip()
+json.dump(d, open(dst, "w"), ensure_ascii=False, indent=1)
+PY
+  cp "$DESC" "$RUN/desc.txt"
+fi
+[ -n "$MAPFROM" ] && printf '%s\n' "$MAPFROM" > "$RUN/map_from"
 echo "RUN=$RUN BASE=${BASE:0:8} MEMBASE=${MEMBASE:0:8}"
