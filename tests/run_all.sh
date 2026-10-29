@@ -182,10 +182,27 @@ check "map_show lists what is known" "SCREEN rewards from=home check=text:Nhiệ
 check "nav_home refuses NAV=ok when the app is not in the foreground" "NAV=stopped layer=foreground app=com.fg.app" "$(cat "$TMP/dev.out")"
 check "the app map is kept locally in the app repo" "MAP_LOCAL=yes" "$(cat "$TMP/dev.out")"
 check "the app map path is <repo>/.jira-bug/app-map.json" "/fo2/.jira-bug/app-map.json" "$(grep MAP_PATH= "$TMP/dev.out")"
+check "nav_home starts the app before the First Open steps" "ORDER=1:am start;" "$(grep ORDER= "$TMP/dev.out")"
 check "a fix worktree reads and saves the main checkout's map" "MAP_FROM_WORKTREE=main" "$(cat "$TMP/dev.out")"
 check "a fix worktree gets no .jira-bug/ of its own" "WORKTREE_CLEAN=yes" "$(cat "$TMP/dev.out")"
 check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
 check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
+
+echo "ticket_brief.py — the QA template is read when written, and its absence changes nothing"
+TB="python3 $ASSETS/ticket_brief.py"
+FULL="$(printf '*Spec:* https://x.atlassian.net/wiki/spaces/A/pages/1\n*Figma:* https://www.figma.com/design/K/App?node-id=12-345\nBuild: 2.6.0\nThiết bị: A52 Android 14\nTrạng thái: đã lưu 1 video\nMô tả bug: chip hiện icon ảnh\nTái hiện bug:\n- Bước 1: Home → AI Video\n- Bước 2: Upload ảnh\nThực tế: https://prnt.sc/a\nExpect sau khi fix: chip hiện icon video')"
+check "a full template is read field by field" "BRIEF=9/9 MISSING=-" "$($TB "$FULL")"
+check "steps keep their words" "STEP2=Upload ảnh" "$($TB "$FULL")"
+check "a Figma node link gives the node id" "FIGMA_NODE=12:345" "$($TB "$FULL")"
+check "a Figma page link is enough" "FIGMA_NODE=page" "$($TB 'figma https://www.figma.com/file/zz/App')"
+check "English headings and mixed numbering" "STEPS=3 STEPS_FROM=heading" "$($TB "$(printf 'Steps to reproduce:\n1. Open Vocabulary\n2) save a word\nB3: đổi ngôn ngữ\nExpected: nghĩa theo ngôn ngữ mới')")"
+check "English Expected is the Expect" "EXPECT=nghĩa theo ngôn ngữ mới" "$($TB "$(printf 'Expected: nghĩa theo ngôn ngữ mới')")"
+check "no headings: an arrow line is the steps" "STEPS=2 STEPS_FROM=arrows" "$($TB 'home -> nhìn tab bar, các tab k đều https://prnt.sc/x')"
+check "a bare screenshot link (the A/B tickets) still yields what QA saw" "ACTUAL=https://prnt.sc/T9Ci7JRT4VvA" "$($TB 'https://prnt.sc/T9Ci7JRT4VvA')"
+check "a bare screenshot link names what is missing" "MISSING=spec,figma,build,device,state,bug,steps,expect" "$($TB 'https://prnt.sc/T9Ci7JRT4VvA')"
+check "an empty ticket is not an error" "BRIEF=0/9" "$($TB ' ')"
+check "a [Screen] prefix keeps its bracket" "BUG=[Home] Lỗi UI" "$($TB "$(printf '[Home] Lỗi UI\n[https://prnt.sc/x]')")"
+check "a Jira-embedded image is what QA saw" "ACTUAL=image-1.png" "$($TB '!image-1.png|width=109,height=222!')"
 
 echo "section.sh — one section of a reference file, never the whole file"
 SEC="$TMP/sec.md"; printf '# T\n\n## A\na1\n**Fix-1 — one** x\nf1\n**Fix-2 — two** y\nf2\n## B\nb1\n' > "$SEC"
@@ -202,9 +219,12 @@ check "put stores it" "APK_CACHED=" "$(JBA_APK_CACHE="$AC/c" bash "$ASSETS/apk-c
 check "the same commit and task is a hit" "APK=$AC/c/repo/" "$(JBA_APK_CACHE="$AC/c" bash "$ASSETS/apk-cache.sh" get "$AC/repo" HEAD assembleDevDebug)"
 
 echo "device-lock.sh install — bounded (a phone can sit on an install prompt forever)"
-IL="$TMP/il"; mkdir -p "$IL/bin" "$IL/h"; printf '#!/bin/bash\ncase "$*" in *install*) sleep 20;; *) echo ok;; esac\n' > "$IL/bin/adb"; chmod +x "$IL/bin/adb"; printf 'x' > "$IL/a.apk"
+IL="$TMP/il"; mkdir -p "$IL/bin" "$IL/h"; printf '#!/bin/bash\ncase "$*" in *install*) sleep 20;; devices) printf "List\\nS9\\tdevice\\nEMU\\tdevice\\n";; *) echo ok;; esac\n' > "$IL/bin/adb"; chmod +x "$IL/bin/adb"; printf 'x' > "$IL/a.apk"
 out="$(HOME="$IL/h" PATH="$IL/bin:$PATH" INSTALL_DEADLINE=1 bash "$ASSETS/device-lock.sh" install S9 12345678 "$IL/a.apk" 2>&1 || true)"
 check "a hung install times out and says why" "INSTALL_TIMEOUT S9 after 1s" "$out"
+out="$(HOME="$IL/h" PATH="$IL/bin:$PATH" INSTALL_DEADLINE=1 bash "$ASSETS/device-lock.sh" install S9 12345678 "$IL/a.apk" 2>&1 || true)"
+check "the same phone is not retried while another device is up" "INSTALL_SKIPPED S9" "$out"
+check "free-serial hands out the other device first" "EMU" "$(HOME="$IL/h" PATH="$IL/bin:$PATH" bash "$ASSETS/device-lock.sh" free-serial 12345678 2>&1)"
 
 echo "scripts/ab/connector-guard.py — sandbox with claude.ai connectors may only READ Confluence"
 G() { echo "{\"tool_name\":\"$1\"}" | python3 "$REPO/scripts/ab/connector-guard.py" 2>/dev/null; echo "rc=$?"; }
@@ -234,6 +254,11 @@ check "share page resolved through og:image to a PNG" "SOURCE=file://$FM/site/pr
 check "page without og:image is reported, not dropped" "REASON=no og:image" "$out"
 check "a non-image behind a .png URL is rejected" "REASON=not an image/video" "$out"
 check "saved files are real PNGs" "PNG image data" "$(file "$FM/out/"link-*.png | head -1)"
+# a streamable.com page is a video share page (A/B AIP396-475: not listed, so one run never saw the video)
+check "list finds a streamable.com video page" "https://streamable.com/6hl8vh" "$(bash "$ASSETS/fetch-media-links.sh" list 'Thực tế: [https://streamable.com/6hl8vh]')"
+printf '\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2' > "$FM/site/v&w.mp4"
+printf '<html><head><meta property="og:video:url" content="file://%s/site/v&amp;w.mp4"></head></html>' "$FM" > "$FM/site/streamable.com-V.html"
+check "og:video URL with &amp; is unescaped before download" "MEDIA=$FM/out2/link-1.mp4" "$(bash "$ASSETS/fetch-media-links.sh" fetch "file://$FM/site/streamable.com-V.html" "$FM/out2")"
 
 echo "setup-json merge keeps JSON valid"
 S="$TMP/s.json"; printf '{\n  "board": "X"\n}\n' > "$S"

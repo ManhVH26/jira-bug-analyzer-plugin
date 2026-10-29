@@ -173,17 +173,22 @@ fo_steps() {   # the app map's First Open steps; first run of an app: seed them 
 }
 
 nav_home() {
-  local setup="$1" major fo n_fo=0 n_app=0 out
+  local setup="$1" major fo n_fo=0 n_app=0 out app_steps
   major="$(fo_major "$setup")"
+  app_steps="$( { bash "$DEV_ASSETS/app-map.sh" after-fo "$setup" 2>/dev/null | grep . ||
+                   python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print("\n".join(d.get("navRecipe") or []))' "$setup" 2>/dev/null; } )"
+  # the app's saved steps start with `launch …`: start the app FIRST, then get past First Open, then the rest
+  # (A/B AIP396-465: the FO steps ran on whatever was on screen, the launch after them restarted the app into its
+  # onboarding, and the verifier was left to tap through it by hand)
+  local n_launch; n_launch="$(printf '%s\n' "$app_steps" | sed -n '/^launch /p' | _nav_steps app 2>/dev/null || echo 0)"
+  app_steps="$(printf '%s\n' "$app_steps" | sed '/^launch /d')"
   if fo="$(fo_steps "$setup" "$major")"; then
     out="$(printf '%s\n' "$fo" | _nav_steps "first-open-$major.x")" \
       || { echo "$out (fix it by hand, then nav_save_fo the steps that worked)"; return 1; }
     n_fo="$out"
   fi
-  out="$( { bash "$DEV_ASSETS/app-map.sh" after-fo "$setup" 2>/dev/null | grep . ||
-             python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print("\n".join(d.get("navRecipe") or []))' "$setup" 2>/dev/null; } | _nav_steps app)" \
-    || { echo "$out"; return 1; }
-  n_app="$out"
+  out="$(printf '%s\n' "$app_steps" | _nav_steps app)" || { echo "$out"; return 1; }
+  n_app=$((out + n_launch))
   if [ "$n_fo" = 0 ] && [ "$n_app" = 0 ]; then
     echo "NAV=no-recipe FO=${major:-none} (find the way once, then nav_save / nav_save_fo it)"; return 1
   fi

@@ -34,6 +34,11 @@ printf '%s' '<hierarchy><node resource-id="com.some.app:id/buttonLanguageNext" t
 python3 -c "import json,sys;d=json.load(open(sys.argv[1]))['firstOpen'];print('FO_SEEDED', d['version'], len(d['steps']))" "$T/fo/.jira-bug/app-map.json"
 nav_save_fo '["tap_id? buttonLanguageNext","repeat 2 tap_id? btnNextOnboarding"]' "$T/fo/.jira-bug/setup.json"
 python3 -c "import json,sys;d=json.load(open(sys.argv[1]))['firstOpen'];print('FO_SAVED', d['version'], d['steps'])" "$T/fo/.jira-bug/app-map.json"
+# the app's saved `launch` runs BEFORE the First Open steps (they ran first, on whatever was on screen; A/B AIP396-465)
+printf '#!/bin/bash\nshift 4\necho "$*" >> %s/order\ncase "$*" in *"cat /sdcard"*) cat %s/ui.xml;; esac\n' "$T" "$T" > "$T/lock-order.sh"
+bash "$A/app-map.sh" after-fo "$T/fo/.jira-bug/setup.json" '["launch com.some.app/.Splash","tap? Khám phá"]' >/dev/null
+: > "$T/order"; OLD="$DEV_LOCK"; DEV_LOCK="$T/lock-order.sh"; nav_home "$T/fo/.jira-bug/setup.json" >/dev/null; DEV_LOCK="$OLD"
+echo "ORDER=$(grep -nE 'am start|input tap' "$T/order" | head -2 | sed -E 's/:.*(am start|input tap).*/:\1/' | tr '\n' ';')"
 # app map: save only when the check holds; nav_to replays home -> screen, checking every hop
 mkdir -p "$T/fo2/gradle" "$T/fo2/.jira-bug"; printf '{"project": "P1"}' > "$T/fo2/.jira-bug/setup.json"
 printf '%s' '<hierarchy><node text="Trang chủ" bounds="[0,2200][200,2300]"/><node text="Phần thưởng" bounds="[600,2200][800,2300]"/><node text="Nhiệm vụ hằng ngày" bounds="[0,300][500,400]"/></hierarchy>' > "$T/ui.xml"

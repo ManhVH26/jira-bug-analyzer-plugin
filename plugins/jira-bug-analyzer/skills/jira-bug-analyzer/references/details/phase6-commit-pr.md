@@ -54,10 +54,13 @@ Written for a non-technical reader (`[VN]`: có dấu, no code/stack/paths — t
 🔧 Đã sửa — [TICKET_KEY]
 
 • Vấn đề: <mô tả ngắn, đúng thứ reporter thấy>
+• Cách tái hiện đã dùng: <các bước> (theo QA | plugin suy ra)
+• Kết quả mong đợi đã kiểm: <Expect ở dạng kiểm được> (theo QA | plugin suy ra)
 • Nguyên nhân: <giải thích đơn giản, không thuật ngữ>
 • Đã sửa: <thay đổi gì, theo ngôn ngữ người dùng>
 • Đã kiểm thử: <thiết bị + bước kiểm thử + kết quả quan sát được>
 • Lưu ý cho QA: <điều QA cần biết / phần cố ý giữ nguyên>  ← bỏ dòng này nếu không có
+• Ticket thiếu: <các mục trong MISSING=, viết thường — vd "bước tái hiện, kết quả mong đợi"> — lần sau ghi thêm giúp để sửa nhanh hơn; nếu bước tái hiện không nói rõ màn/nguồn mà plugin phải suy ra (vd "một bài học" nhưng bug chỉ ở bài học video) thì thêm "bước tái hiện nên ghi rõ màn: <màn plugin suy ra>"  ← bỏ dòng này khi BRIEF đủ và bước đã ghi rõ màn
 • Pull request: [PR #N|<pr_url>] (đang chờ review, chưa merge)
 ```
 The `*Ảnh/Video kiểm thử:*` heading and the `!image!` / `[^video]` embeds are appended by `jira_evidence_comment` — do NOT write them in the body (writing them too produced the heading twice on AIP396-475).

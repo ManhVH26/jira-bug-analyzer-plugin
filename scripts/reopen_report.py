@@ -15,10 +15,15 @@ Env: JIRA_URL (default https://jira.apero.vn), JIRA_PERSONAL_TOKEN (Bearer PAT, 
 import argparse, json, math, os, sys, urllib.parse, urllib.request
 from datetime import datetime, timezone
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "plugins", "jira-bug-analyzer",
+                                "skills", "jira-bug-analyzer", "assets"))
+import ticket_brief  # noqa: E402  (how much of the QA template the ticket carried — the same reader the run uses)
+
 DONE = {"resolved", "closed", "done", "reviewing"}
 OPEN = {"reopened", "request", "in progress", "to do", "open"}
 DEFERRED_LABELS = {"analyzed-deferred", "qa-info-needed", "needs-po-clarification"}
 PAGE = 100
+BRIEF_FULL = 5   # ticket_brief fields (of 9) from which a ticket counts as "written to the template"
 # A done -> open flip by the SAME person who just resolved it, within this window, is a workflow
 # correction (e.g. Resolved -> In Progress -> Resolved while finalizing), not a QA reopen.
 # Keep in sync with REOPEN_SELF_FLIP_MINUTES in references/constants.md.
@@ -95,8 +100,11 @@ def classify(issues, auto, since=None, by=None):
         t0 = fix_time(iss, auto)
         if t0 is None or (since and t0 < since):
             continue
-        labels = set(iss.get("fields", {}).get("labels") or [])
+        f = iss.get("fields", {})
+        labels = set(f.get("labels") or [])
+        brief = len(ticket_brief.parse(f.get("description") or "")[4])
         rows.append({"key": iss["key"], "fixed": t0.isoformat(), "reopened": bool(reopened_after(iss, t0)),
+                     "brief": brief, "reporter": (f.get("reporter") or {}).get("name") or "?",
                      "low": "auto-fix-low" in labels, "deferred_before": bool(labels & DEFERRED_LABELS),
                      "label_says_reopened": "auto-fix-reopened" in labels})
     return rows
@@ -127,6 +135,13 @@ def summarize(auto_rows, base_rows):
         "auto_low": rate([x for x in auto_rows if x["low"]]),
         "auto_normal": rate([x for x in auto_rows if not x["low"]]),
         "auto_deferred_before": rate([x for x in auto_rows if x["deferred_before"]]),
+        # does a fuller QA ticket get reopened less? (BRIEF_FULL of 9 template fields; a hint for QA, never a gate)
+        "auto_brief_full": rate([x for x in auto_rows if x["brief"] >= BRIEF_FULL]),
+        "auto_brief_thin": rate([x for x in auto_rows if x["brief"] < BRIEF_FULL]),
+        "auto_by_reporter": {r: {**rate([x for x in auto_rows if x["reporter"] == r]),
+                                 "brief_avg": round(sum(x["brief"] for x in auto_rows if x["reporter"] == r)
+                                                    / sum(1 for x in auto_rows if x["reporter"] == r), 1)}
+                             for r in sorted({x["reporter"] for x in auto_rows})},
         "baseline_non_auto": base,
         "p_value_auto_vs_baseline": two_prop_p(auto, base),
         "label_missed_reopens": sum(1 for x in auto_rows if x["reopened"] and not x["label_says_reopened"]),
@@ -137,7 +152,7 @@ def summarize(auto_rows, base_rows):
 def jira_search(url, token, jql):
     out, start = [], 0
     while True:
-        q = urllib.parse.urlencode({"jql": jql, "fields": "labels,status", "expand": "changelog",
+        q = urllib.parse.urlencode({"jql": jql, "fields": "labels,status,description,reporter", "expand": "changelog",
                                     "maxResults": PAGE, "startAt": start})
         req = urllib.request.Request(f"{url.rstrip('/')}/rest/api/2/search?{q}",
                                      headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
@@ -176,6 +191,10 @@ def main():
     print(f"    --auto-low              {pct(s['auto_low'])}")
     print(f"    --auto (normal)         {pct(s['auto_normal'])}")
     print(f"    deferred before, fixed  {pct(s['auto_deferred_before'])}   (should be 0 tickets after v1.15.3)")
+    print(f"    ticket >= {BRIEF_FULL}/9 fields  {pct(s['auto_brief_full'])}   (QA template, ticket_brief.py)")
+    print(f"    ticket <  {BRIEF_FULL}/9 fields  {pct(s['auto_brief_thin'])}")
+    for r, x in s["auto_by_reporter"].items():
+        print(f"      reporter {r:<14} {pct(x)}   fields avg {x['brief_avg']}/9")
     print(f"  baseline (non-auto bugs)  {pct(s['baseline_non_auto'])}")
     print(f"  p-value auto vs baseline  {s['p_value_auto_vs_baseline']}")
     print(f"  reopens the label missed  {s['label_missed_reopens']}")

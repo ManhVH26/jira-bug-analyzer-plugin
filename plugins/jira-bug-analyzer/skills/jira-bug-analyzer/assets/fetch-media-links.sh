@@ -24,11 +24,11 @@ if [ -n "$TEXT" ] && [ ! -f "$TEXT" ]; then T2="$(mktemp)"; printf '%s\n' "$TEXT
 UA="jira-bug-analyzer/1.15.3 (+https://github.com/hung-apero/jira-bug-analyzer-plugin)"
 MAX="${MEDIA_MAX_BYTES:-52428800}"
 
-# Share-page hosts (resolve via og:image) + direct media URLs by extension.
+# Share-page hosts (resolve via og:image / og:video — streamable.com is a video page) + direct media URLs by extension.
 links() {
   grep -oE '(https?|file)://[^][ "<>|)}]+' "$TEXT" \
     | sed -E 's/[.,;:!?]+$//' \
-    | grep -Ei '(prnt\.sc|prntscr\.com|lightshot|ibb\.co|imgbb\.com|imgur\.com|postimg\.cc|gyazo\.com|\.(png|jpe?g|gif|webp|mp4|mov|webm)(\?|$))' \
+    | grep -Ei '(prnt\.sc|prntscr\.com|lightshot|ibb\.co|imgbb\.com|imgur\.com|postimg\.cc|gyazo\.com|streamable\.com|\.(png|jpe?g|gif|webp|mp4|mov|webm)(\?|$))' \
     | awk '!seen[$0]++' || true
 }
 
@@ -41,15 +41,15 @@ kind() { file -b --mime-type "$1" 2>/dev/null || echo unknown; }
 
 og_media() { # print the og:video[:url] or og:image URL of a saved HTML page (attribute order varies)
   python3 - "$1" <<'PY'
-import re, sys
-html = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+import html as H, re, sys
+page = open(sys.argv[1], encoding="utf-8", errors="replace").read()
 found = {}
-for tag in re.findall(r"<meta\b[^>]*>", html, re.I):  # attribute order varies between hosts
+for tag in re.findall(r"<meta\b[^>]*>", page, re.I):  # attribute order varies between hosts
     prop = re.search(r'(?:property|name)\s*=\s*["\']og:(video:url|video|image)["\']', tag, re.I)
     val = re.search(r'content\s*=\s*["\']([^"\']+)["\']', tag, re.I)
     if prop and val:
         found.setdefault(prop.group(1).lower(), val.group(1))
-print(found.get("video:url") or found.get("video") or found.get("image") or "")
+print(H.unescape(found.get("video:url") or found.get("video") or found.get("image") or ""))  # &amp; in a signed CDN URL breaks it
 PY
 }
 

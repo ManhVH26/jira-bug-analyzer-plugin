@@ -156,6 +156,12 @@ install() {             # install <serial> <token> <apk> [ttl] — acquire then 
   local token="${2:-unknown}"
   local apk="$3"
   local ttl="${4:-1800}"
+  # a serial whose install timed out recently stalls again (same prompt): skip it while another device is up
+  # (A/B AIP396-465: the analyzer retried the phone after INSTALL_TIMEOUT and lost a second 120 s)
+  if recent_timeout "$serial" && [ "$(connected | grep -vcx "$serial")" -gt 0 ]; then
+    echo "INSTALL_SKIPPED $serial — an install here timed out $(( $(now) - $(cat "$LOCKROOT/$serial.install-timeout") ))s ago; take another serial: device-lock.sh free-serial <token> (it skips this one)"
+    return 4
+  fi
   acquire "$serial" "$token" "$ttl" || return 3
   # bounded: on a phone an install can wait forever on a device-side prompt (install-over-USB confirm,
   # Play Protect scan). A/B rerun AAP857-113: one install on the phone ran >300 s. Timed out -> say so; the
@@ -167,17 +173,23 @@ install() {             # install <serial> <token> <apk> [ttl] — acquire then 
   kill "$guard" 2>/dev/null; wait "$guard" 2>/dev/null
   cat "$out"; rm -f "$out"
   if [ "$rc" -eq 137 ]; then
-    echo "INSTALL_TIMEOUT $serial after ${secs}s — the device may be showing an install / Play Protect prompt; release it and use another serial"
+    now > "$LOCKROOT/$serial.install-timeout"; release "$serial" "$token" >/dev/null 2>&1
+    echo "INSTALL_TIMEOUT $serial after ${secs}s — the device may be showing an install / Play Protect prompt; released it; take another serial: device-lock.sh free-serial <token> (skips this one for $((INSTALL_SKIP_SECS / 60)) min)"
     return 4
   fi
   [ "$rc" -eq 0 ] || return "$rc"
 }
 
+INSTALL_SKIP_SECS="${INSTALL_SKIP_SECS:-1800}"
+connected() { adb devices | awk 'NR>1 && $2=="device"{print $1}'; }
+recent_timeout() { local f="$LOCKROOT/$1.install-timeout"; [ -f "$f" ] && [ $(( $(now) - $(cat "$f") )) -lt "$INSTALL_SKIP_SECS" ]; }
+
 free_serial() {         # free-serial <token> [ttl] — claim + print the first unlocked connected serial
   local token="${1:-unknown}"
   local ttl="${2:-1800}"
   local s
-  for s in $(adb devices | awk 'NR>1 && $2=="device"{print $1}'); do
+  # a serial whose install timed out recently goes last: it is used only when nothing else is free
+  for s in $(connected | while read -r x; do recent_timeout "$x" && echo "1 $x" || echo "0 $x"; done | sort -s -k1,1n | cut -d' ' -f2); do
     if acquire "$s" "$token" "$ttl" >/dev/null 2>&1; then echo "$s"; return 0; fi
   done
   echo ""; return 3

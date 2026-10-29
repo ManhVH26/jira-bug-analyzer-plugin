@@ -68,6 +68,12 @@ Override when needed:
 /jira-bug-analyzer AIP686 @3 --rediscover     # a wrong page was adopted / the spec moved
 ```
 
+### Ticket template for QA (optional)
+
+[`plugins/jira-bug-analyzer/QA-TICKET-TEMPLATE.md`](plugins/jira-bug-analyzer/QA-TICKET-TEMPLATE.md) — what to
+write so a bug is reproduced and fixed faster (steps naming the exact screen/source, Expect in plain words). Never
+a gate: a partial or messy ticket is fixed as before.
+
 ## Prerequisites
 
 The skill auto-installs its MCP server *config* on first run (jira, confluence, figma, human-mcp)
