@@ -189,6 +189,9 @@ check "tap_text scrolls to a label below the fold" "TAP=ok text=Video AI at 540 
 check "an optional nav step does not scroll" "OPT_SWIPES=0" "$(cat "$TMP/dev.out")"
 check "nav_to closes an ad covering the screen and retries the hop" "AD=closed" "$(sed -n '/AD=closed/,$p' "$TMP/dev.out")"
 check "after the ad, nav_to reaches the screen" "NAV=ok screen=rewards hops=2" "$(sed -n '/AD=closed/,$p' "$TMP/dev.out")"
+check "app_lang picks the language in the First Open picker and goes home" "APP_LANG=ok lang=Tiếng Việt pkg=com.some.app" "$(cat "$TMP/dev.out")"
+check "app_lang clears the app's data first (the app ignores the system locale)" "LANG_CLEARED=1" "$(cat "$TMP/dev.out")"
+check "app_lang says when there is no language picker" "APP_LANG=stopped reason=no-language-picker" "$(cat "$TMP/dev.out")"
 check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
 check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
 

@@ -8,6 +8,7 @@
 #   wait_text "<text>" [s]   # poll the screen until <text> shows (default 15 s); prints FOUND/NOT_FOUND
 #   back                     # BACK key
 #   focus                    # current focused activity (ad / splash / app screen)
+#   app_lang "<name>|<alt>" [setup.json]   # app in that language: clear data -> FO language picker -> home
 #   close_ad                 # an ad activity has focus -> Close / BACK until it is gone (nav_to does this on a miss)
 #   launch <package>         # start the app's launcher activity
 #   tap_id <id> [n]          # tap the node whose resource-id ends with :id/<id> (language-independent)
@@ -209,12 +210,45 @@ nav_home() {
   local label="none" pkg; [ -n "$major" ] && label="$major.x"
   # every step can be optional, so "no step failed" is not "the app is on screen": check the foreground app
   # (A/B rerun AIP396-465: NAV=ok while the phone sat on the launcher — the saved launch step had not started it)
-  pkg="$( { bash "$DEV_ASSETS/app-map.sh" app "$setup" 2>/dev/null | sed -n 's/^applicationId=//p'
-            bash "$DEV_ASSETS/app-map.sh" after-fo "$setup" 2>/dev/null | sed -n 's/^launch \([^/ ]*\).*/\1/p'; } | head -1)"
+  pkg="$(_app_pkg "$setup")"
   if [ -n "$pkg" ] && ! focus | grep -q "$pkg"; then
     echo "NAV=stopped layer=foreground app=$pkg not on screen after the recipe (launch it: launch $pkg)"; return 1
   fi
   echo "NAV=ok fo=$label fo_steps=$n_fo app_steps=$n_app"
+}
+
+_app_pkg() {   # the app's package: the map's applicationId, else the saved `launch <pkg>` step
+  { bash "$DEV_ASSETS/app-map.sh" app "$1" 2>/dev/null | sed -n 's/^applicationId=//p'
+    bash "$DEV_ASSETS/app-map.sh" after-fo "$1" 2>/dev/null | sed -n 's/^launch \([^/ ]*\).*/\1/p'; } | head -1
+}
+
+# app_lang "<name>[|<other name>…]" [setup.json] — put the app in a language, then go home.
+# Apero apps take their language from the First Open language picker, not from Android: `cmd locale` / the
+# system language are ignored, and many apps have no in-app language setting. So: clear the app's data (it is the
+# debug build under test — saved data states are gone and must be rebuilt after), launch, wait for the picker
+# (closing ads), tap the language (names as the picker shows them, e.g. "Tiếng Việt|Vietnamese"), confirm, and
+# let nav_home finish First Open. A/B AAP857-113: a bug only visible in Vietnamese cost ~16 min and two `blocked`
+# reports while the agent tried the system locale and a settings screen that did not exist.
+app_lang() {
+  local names="$1" setup="${2:-.jira-bug/setup.json}" pkg i=0 n tapped=""
+  pkg="$(_app_pkg "$setup")"
+  [ -n "$pkg" ] || { echo "APP_LANG=stopped reason=no-package (nav_save the app's launch step first)"; return 1; }
+  L shell pm clear "$pkg" >/dev/null
+  launch "$pkg" >/dev/null
+  while [ "$i" -lt "${APP_LANG_WAIT:-10}" ] && ! has_id buttonLanguageNext; do
+    i=$((i + 1)); close_ad >/dev/null || { has_id view_overlay_gradient && back; }; sleep 3
+  done
+  has_id buttonLanguageNext || { echo "APP_LANG=stopped reason=no-language-picker pkg=$pkg (app data was cleared)"; return 1; }
+  local alts k=0 h; IFS='|' read -r -a alts <<< "$names"   # split here only: tap_text needs the normal IFS
+  while [ -z "$tapped" ]; do   # every name at each scroll position, so one name's scroll never skips another's row
+    for n in "${alts[@]}"; do TAP_SCROLL=0 tap_text "$n" >/dev/null && { tapped="$n"; break; }; done
+    [ -n "$tapped" ] || [ "$k" -ge 4 ] && break
+    k=$((k + 1)); h="$(_screen_h)"; L shell input swipe 540 $((h * 7 / 10)) 540 $((h * 7 / 20)) 300; sleep 1
+  done
+  [ -n "$tapped" ] || { echo "APP_LANG=stopped reason=language-not-in-picker want=$names"; return 1; }
+  sleep 1; tap_id buttonLanguageNext >/dev/null
+  local nav; nav="$(nav_home "$setup")" || { echo "APP_LANG=set lang=$tapped home=stopped ($nav)"; return 1; }
+  echo "APP_LANG=ok lang=$tapped pkg=$pkg (app data cleared: rebuild saved states) $nav"
 }
 
 nav_save_fo() {   # nav_save_fo '<json array>' [setup.json] — the steps that got past First Open, into this app's map

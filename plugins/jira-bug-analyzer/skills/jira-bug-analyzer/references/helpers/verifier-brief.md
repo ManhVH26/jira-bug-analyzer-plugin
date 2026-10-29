@@ -31,6 +31,9 @@ You are the on-device verifier for <TICKET> (<one-line bug>). Follow
   `tap_id <id>` (ids from `ui`/the dump) and save the fix into this app's map: `nav_save_fo '[…]' <repo-root>/.jira-bug/setup.json`.
   `NAV=no-recipe` / `NAV=stopped layer=app` → find the app's own way once with `ui` + `tap_text`, then save it: `nav_save <repo-root>/.jira-bug/setup.json '["launch <applicationId>","back_if Ad","tap? Tiếp tục",…]'`
   so every later run of this project skips the splash/ad/onboarding walk.
+  **The bug needs another app language:** `app_lang "Tiếng Việt|Vietnamese" <repo-root>/.jira-bug/setup.json` (one call: clears the app's
+  data, picks the language in the First Open picker, goes home). The system locale (`cmd locale`, Android settings) does not change an
+  Apero app's language — do not try it. App data is cleared, so build any saved data state after this call, not before.
 - **Package:** `<applicationId>`. **Evidence dir:** `<repo-root>/.jira-bug/evidence/<TICKET>/`; name files `verify-<what>.png|mp4`
   (and `repro-<what>…` for the before state).
 - **Target state:** <the screen + data state the bug needs>. **Code entry point:** <file:line / composable / event
