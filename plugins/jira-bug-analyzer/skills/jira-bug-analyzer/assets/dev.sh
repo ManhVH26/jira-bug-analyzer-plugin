@@ -14,7 +14,7 @@
 #                            # `navRecipe` from setup.json
 #   nav_save <setup.json> '<json array>'   # save the app's own steps after First Open (first run of a project)
 #   nav_save_fo '<json array>'             # save / fix the shared First Open steps for this FO major version
-#   map_show [setup.json]    # what is already known about this app (assets/app-map.sh, shared memory)
+#   map_show [setup.json]    # what is already known about this app (assets/app-map.sh: <repo>/.jira-bug/app-map.json)
 #   nav_to <screen> [setup.json]           # home (FO + after-FO) then the saved route to <screen>, each hop checked
 #   state <name> [setup.json]              # build a saved data state (e.g. saved_video_word) the same way
 #   map_save screen|state <name> '<json steps>' '<check>' [from=<screen>] [setup.json]

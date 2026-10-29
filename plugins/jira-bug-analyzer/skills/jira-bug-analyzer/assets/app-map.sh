@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# app-map.sh — what the plugin has learned about ONE app, shared by the whole team (shared memory
-# project/<PROJ>/app-map.json; .jira-bug/app-map.json when there is no memory clone).
+# app-map.sh — what the plugin has learned about ONE app, kept LOCALLY in that app's repo:
+# <repo>/.jira-bug/app-map.json (next to setup.json; .jira-bug/ is git-excluded). Every app that runs the plugin
+# builds its own map: a few runs fill it in, later runs keep it current when the app's flow changes.
 #
 # Learn once, reuse, fix when wrong: every entry carries a `check` (text:<visible text> | id:<view id>) that
-# must hold when the entry is replayed or saved; dev.sh never trusts an entry it could not check.
+# must hold when the entry is replayed or saved; dev.sh never trusts an entry it could not check, and a hop
+# whose check fails is walked by hand and saved again (overwriting the stale one).
 #
 #   app-map.sh path   <setup.json>                         -> the file in use
 #   app-map.sh show   <setup.json>                         -> app facts, after-FO steps, screens, states (one line each)
@@ -11,33 +13,21 @@
 #   app-map.sh route  <setup.json> <screen|state>           -> "steps<TAB>check" per hop, home first (exit 1: unknown)
 #   app-map.sh set    <setup.json> screen|state <name> '<json steps>' '<check>' [from=home]
 #   app-map.sh after-fo <setup.json> ['<json steps>']       -> print / set the app's own steps after First Open
-#   app-map.sh publish <setup.json>                          -> push the shared copy (background-safe, idempotent)
 #
 # A/B (final run): per ticket the analyzer and the verifier each re-learned the way to the screen under test
 # (AIP396-475: 9 navigation commands) and looked up the app id again; nothing carried to the next ticket.
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CMD="${1:?usage: app-map.sh path/show/app/route/set/after-fo/publish <setup.json> ...}"; SETUP="${2:?setup.json}"; shift 2
+CMD="${1:?usage: app-map.sh path/show/app/route/set/after-fo <setup.json> ...}"; SETUP="${2:?setup.json}"; shift 2
 
-FILE="$(python3 - "$SETUP" "$(bash "$SELF_DIR/memory-sync.sh" path 2>/dev/null || true)" <<'PY'
-import json, os, sys
-setup, mem = sys.argv[1], sys.argv[2]
-try: s = json.load(open(setup))
-except Exception: s = {}
-proj = s.get("project") or s.get("board") or ""
-if mem and os.path.isdir(mem) and proj:
-    print(os.path.join(mem, "project", proj, "app-map.json"))
-else:
-    print(os.path.join(os.path.dirname(os.path.abspath(setup)), "app-map.json"))
-PY
-)"
+FILE="$(cd "$(dirname "$SETUP")" 2>/dev/null && pwd)/app-map.json"
+# local to this machine and this app: keep .jira-bug/ out of the app's commits (git-excluded, never .gitignore'd)
+COMMON="$(git -C "$(dirname "$FILE")" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$COMMON" ] && ! grep -qxF ".jira-bug/" "$COMMON/info/exclude" 2>/dev/null; then
+  mkdir -p "$COMMON/info" && printf '.jira-bug/\n' >> "$COMMON/info/exclude"
+fi
 
 if [ "$CMD" = path ]; then echo "$FILE"; exit 0; fi
-if [ "$CMD" = publish ]; then
-  case "$FILE" in */project/*/app-map.json) bash "$SELF_DIR/memory-sync.sh" push "$FILE" "app-map: $(basename "$(dirname "$FILE")")" >/dev/null 2>&1 && echo "MAP_PUBLISHED=$FILE" || echo "MAP_PUBLISH=failed (kept locally: $FILE)" ;;
-    *) echo "MAP_PUBLISH=local-only $FILE" ;; esac
-  exit 0
-fi
 
 python3 - "$CMD" "$FILE" "$@" <<'PY'
 import json, os, sys, datetime

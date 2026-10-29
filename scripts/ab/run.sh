@@ -22,10 +22,10 @@ PY
 # a project's local setup.json survives between tickets in real use: seed the navRecipe an earlier run saved
 REC="$SB/runs/_recipes/${T%%-*}.json"
 [ -f "$REC" ] && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["navRecipe"]=json.load(open(sys.argv[2])); json.dump(d,open(sys.argv[1],"w"),indent=2)' "$P/.jira-bug/setup.json" "$REC"
-# shared memory and the local APK cache persist between tickets in real use: carry what earlier runs learned
-# (app map per project, First Open recipes) into this run's memory clone, and share one APK cache
+# in real use the app's local map (<repo>/.jira-bug/app-map.json), the shared First Open recipes and the local APK
+# cache persist between tickets: carry what earlier runs of the same project learned into this run
 KEEP="$SB/runs/_kept"; PROJ="${T%%-*}"; MEMC="$H/.claude/jira-bug-memory"
-[ -f "$KEEP/app-map/$PROJ.json" ] && mkdir -p "$MEMC/project/$PROJ" && cp "$KEEP/app-map/$PROJ.json" "$MEMC/project/$PROJ/app-map.json"
+[ -f "$KEEP/app-map/$PROJ.json" ] && cp "$KEEP/app-map/$PROJ.json" "$P/.jira-bug/app-map.json"   # the app's local map persists in real use
 [ -d "$KEEP/device-nav" ] && mkdir -p "$MEMC/device-nav" && cp -R "$KEEP/device-nav/." "$MEMC/device-nav/"
 cd "$P"
 START=$(date +%s)
@@ -43,7 +43,7 @@ RC=$?; END=$(date +%s)
 kill "$MOCK" 2>/dev/null; wait "$MOCK" 2>/dev/null
 printf '{"rc": %s, "seconds": %s}\n' "$RC" "$((END-START))" > "$RUN/timing.json"
 mkdir -p "$KEEP/app-map" "$KEEP/device-nav"   # ...and keep what this run learned for the next ticket
-[ -f "$MEMC/project/$PROJ/app-map.json" ] && cp "$MEMC/project/$PROJ/app-map.json" "$KEEP/app-map/$PROJ.json"
+[ -f "$P/.jira-bug/app-map.json" ] && cp "$P/.jira-bug/app-map.json" "$KEEP/app-map/$PROJ.json"
 [ -d "$MEMC/device-nav" ] && cp -R "$MEMC/device-nav/." "$KEEP/device-nav/"
 mkdir -p "$SB/runs/_recipes"
 python3 -c 'import json,sys; r=json.load(open(sys.argv[1])).get("navRecipe"); r and json.dump(r,open(sys.argv[2],"w"),ensure_ascii=False)' "$P/.jira-bug/setup.json" "$REC" 2>/dev/null || true

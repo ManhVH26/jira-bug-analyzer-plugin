@@ -179,6 +179,8 @@ check "nav_to taps the saved steps" "shell input tap 700 2250;" "$(sed -n '/NAV=
 check "nav_to says when a screen was never mapped" "NAV=unknown screen=nowhere" "$(cat "$TMP/dev.out")"
 check "map_show lists what is known" "SCREEN rewards from=home check=text:Nhiệm vụ steps=1" "$(cat "$TMP/dev.out")"
 check "nav_home refuses NAV=ok when the app is not in the foreground" "NAV=stopped layer=foreground app=com.fg.app" "$(cat "$TMP/dev.out")"
+check "the app map is kept locally in the app repo" "MAP_LOCAL=yes" "$(cat "$TMP/dev.out")"
+check "the app map path is <repo>/.jira-bug/app-map.json" "/fo2/.jira-bug/app-map.json" "$(grep MAP_PATH= "$TMP/dev.out")"
 check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
 check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
 

@@ -46,3 +46,5 @@ map_show "$T/fo2/.jira-bug/setup.json" | tr '\n' ';'; echo
 mkdir -p "$T/fg/.jira-bug"; printf '{"project": "FG"}' > "$T/fg/.jira-bug/setup.json"
 bash "$A/app-map.sh" after-fo "$T/fg/.jira-bug/setup.json" '["launch com.fg.app/com.fg.Splash"]' >/dev/null
 nav_home "$T/fg/.jira-bug/setup.json"
+# the app map lives in the app's own repo, next to setup.json, whatever the shared memory holds
+mkdir -p "$T/.claude/jira-bug-memory/project/P1"; echo "MAP_PATH=$(bash "$A/app-map.sh" path "$T/fo2/.jira-bug/setup.json")"; ls "$T/fo2/.jira-bug/app-map.json" >/dev/null && echo "MAP_LOCAL=yes"
