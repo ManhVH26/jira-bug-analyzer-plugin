@@ -58,3 +58,17 @@ mkdir -p "$T/.claude/jira-bug-memory/project/P1"; echo "MAP_PATH=$(bash "$A/app-
 git init -q "$T/wtm" && git -C "$T/wtm" -c user.email=t@t -c user.name=t commit -q --allow-empty -m a && git -C "$T/wtm" worktree add -q "$T/wtf" 2>/dev/null
 bash "$A/app-map.sh" set "$T/wtf/.jira-bug/setup.json" screen saved '["tap_text Đã lưu"]' 'text:Đã lưu' >/dev/null
 bash "$A/app-map.sh" show "$T/wtm/.jira-bug/setup.json" | grep -q "SCREEN saved" && echo "MAP_FROM_WORKTREE=main"; [ -e "$T/wtf/.jira-bug" ] || echo "WORKTREE_CLEAN=yes"
+# tap_text scrolls to a label below the fold; an optional nav step never scrolls (A/B AAP857-112)
+printf '%s' '<hierarchy><node text="Ảnh AI" bounds="[0,800][1080,900]"/></hierarchy>' > "$T/ui-top.xml"
+printf '%s' '<hierarchy><node text="Video AI" bounds="[0,1500][1080,1550]"/></hierarchy>' > "$T/ui-below.xml"
+printf '#!/bin/bash\nshift 4\ncase "$*" in *"input swipe"*) echo swipe >> %s/swipes; touch %s/scrolled;; *"wm size"*) echo "Physical size: 1080x2340";; *"cat /sdcard"*) [ -e %s/scrolled ] && cat %s/ui-below.xml || cat %s/ui-top.xml;; esac\n' "$T" "$T" "$T" "$T" "$T" > "$T/lock-scroll.sh"
+OLD="$DEV_LOCK"; DEV_LOCK="$T/lock-scroll.sh"; rm -f "$T/scrolled"; : > "$T/swipes"
+tap_text "Video AI"
+rm -f "$T/scrolled"; : > "$T/swipes"; echo 'tap? Không có' | _nav_steps opt >/dev/null; echo "OPT_SWIPES=$(wc -l < "$T/swipes" | tr -d ' ')"
+DEV_LOCK="$OLD"
+# nav_to closes an ad that covers the screen, then retries the hop
+printf '%s' '<hierarchy><node text="Close" bounds="[960,120][1060,220]"/><node text="Trang chủ" bounds="[0,2200][200,2300]"/><node text="Phần thưởng" bounds="[600,2200][800,2300]"/><node text="Nhiệm vụ hằng ngày" bounds="[0,300][500,400]"/></hierarchy>' > "$T/ui-ad.xml"
+printf '#!/bin/bash\nshift 4\ncase "$*" in *dumpsys*) [ -e %s/adgone ] && echo "mCurrentFocus=Window{1 u0 com.x/com.x.MainActivity}" || echo "mCurrentFocus=Window{1 u0 com.x/com.google.android.gms.ads.AdActivity}";; *"input tap 1010 170"*) touch %s/adgone;; *"input tap 700 2250"*) [ -e %s/adgone ] && echo tapped >> %s/adtaps;; *"cat /sdcard"*) if [ -e %s/adgone ]; then cat %s/ui.xml; else sed "s/Phần thưởng/x/" %s/ui-ad.xml; fi;; esac\n' "$T" "$T" "$T" "$T" "$T" "$T" "$T" > "$T/lock-ad.sh"
+OLD="$DEV_LOCK"; DEV_LOCK="$T/lock-ad.sh"; rm -f "$T/adgone"; : > "$T/adtaps"
+TAP_SCROLL=0 nav_to rewards "$T/fo2/.jira-bug/setup.json"; echo "AD_TAPS=$(wc -l < "$T/adtaps" | tr -d ' ')"
+DEV_LOCK="$OLD"

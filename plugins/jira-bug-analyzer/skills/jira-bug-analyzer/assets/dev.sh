@@ -8,6 +8,7 @@
 #   wait_text "<text>" [s]   # poll the screen until <text> shows (default 15 s); prints FOUND/NOT_FOUND
 #   back                     # BACK key
 #   focus                    # current focused activity (ad / splash / app screen)
+#   close_ad                 # an ad activity has focus -> Close / BACK until it is gone (nav_to does this on a miss)
 #   launch <package>         # start the app's launcher activity
 #   tap_id <id> [n]          # tap the node whose resource-id ends with :id/<id> (language-independent)
 #   nav_home <setup.json>    # reach the app's home in ONE call: the shared First Open layer, then the app's own
@@ -98,15 +99,28 @@ tap_id() {
   L shell input tap $xy && echo "TAP=ok id=$id at $xy"
 }
 
+# tap_text scrolls down up to TAP_SCROLL times (default 3) before NOT_FOUND: a label below the fold is not
+# "missing from this build" (A/B AAP857-112: "Video AI" sat under the fold of Công cụ, tap_text said NOT_FOUND,
+# and the repro agent concluded the build had no such entry — two stops, ~7 min). Optional nav steps pass 0.
+_screen_h() {
+  [ -n "${DEV_SCREEN_H:-}" ] || DEV_SCREEN_H="$(L shell wm size 2>/dev/null | grep -oE '[0-9]+x[0-9]+' | tail -1 | cut -dx -f2)"
+  echo "${DEV_SCREEN_H:-2000}"
+}
+
 tap_text() {
-  local want="$1" nth="${2:-1}" xy
-  xy="$(ui | python3 -c '
+  local want="$1" nth="${2:-1}" xy k=0 h
+  while :; do
+    xy="$(ui | python3 -c '
 import sys
 want, nth = sys.argv[1].lower(), int(sys.argv[2])
 hits = [l.rsplit(" ", 2) for l in sys.stdin if sys.argv[1].lower() in l.lower()]
 print(f"{hits[nth - 1][1]} {hits[nth - 1][2]}" if len(hits) >= nth else "")' "$want" "$nth")"
-  if [ -z "$xy" ]; then echo "TAP=NOT_FOUND text=$want"; return 1; fi
-  L shell input tap $xy && echo "TAP=ok text=$want at $xy"
+    [ -n "$xy" ] || [ "$k" -ge "${TAP_SCROLL:-3}" ] && break
+    k=$((k + 1)); h="$(_screen_h)"
+    L shell input swipe 540 $((h * 7 / 10)) 540 $((h * 7 / 20)) 300; sleep 1
+  done
+  if [ -z "$xy" ]; then echo "TAP=NOT_FOUND text=$want${k:+ scrolled=$k}"; return 1; fi
+  L shell input tap $xy && echo "TAP=ok text=$want at $xy$([ "$k" -gt 0 ] && echo " scrolled=$k")"
 }
 
 wait_text() {
@@ -142,7 +156,7 @@ _nav_steps() {   # _nav_steps <label> — run steps from stdin; prints NAV=stopp
         back)           back ;;
         "back_if "*)    ui | grep -qiF -- "$arg" && back ;;
         "back_if_id "*) has_id "$arg" && back ;;
-        "tap? "*)       tap_text "${step#"tap? "}" >/dev/null || true ;;
+        "tap? "*)       TAP_SCROLL=0 tap_text "${step#"tap? "}" >/dev/null || true ;;
         "tap_id? "*)    tap_id "${step#"tap_id? "}" >/dev/null || true ;;
         "tap_id "*)     tap_id "$arg" >/dev/null || { echo "NAV=stopped layer=$label step=$i ($step)"; return 1; } ;;
         "tap "*)        tap_text "$arg" >/dev/null || { echo "NAV=stopped layer=$label step=$i ($step)"; return 1; } ;;
@@ -235,12 +249,25 @@ nav_to() {   # nav_to <screen|state> [setup.json]
   while IFS=$'\t' read -r steps check; do
     hop=$((hop + 1))
     python3 -c 'import json,sys;print("\n".join(json.loads(sys.argv[1])))' "$steps" | _nav_steps "$want#$hop" >/dev/null \
+      || { close_ad && python3 -c 'import json,sys;print("\n".join(json.loads(sys.argv[1])))' "$steps" | _nav_steps "$want#$hop" >/dev/null; } \
       || { echo "NAV=stopped screen=$want hop=$hop (fix by hand, then map_save)"; return 1; }
     [ -z "$check" ] || check_ok "$check" || { echo "NAV=stopped screen=$want hop=$hop check=$check (fix by hand, then map_save)"; return 1; }
   done <<EOF
 $out
 EOF
   echo "NAV=ok screen=$want hops=$hop"
+}
+
+# An interstitial can open on any screen (A/B AAP857-112: a test ad covered home and nav_to stopped at hop 1).
+# close_ad: when an ad activity has focus, tap its Close or press BACK until it is gone; 1 when there was none.
+close_ad() {
+  local i=0
+  focus | grep -q 'AdActivity' || return 1
+  while [ "$i" -lt 4 ] && focus | grep -q 'AdActivity'; do
+    i=$((i + 1)); TAP_SCROLL=0 tap_text "Close" >/dev/null || back; sleep 2
+  done
+  focus | grep -q 'AdActivity' && return 1
+  echo "AD=closed"
 }
 
 state() { nav_to "$@"; }

@@ -185,6 +185,10 @@ check "the app map path is <repo>/.jira-bug/app-map.json" "/fo2/.jira-bug/app-ma
 check "nav_home starts the app before the First Open steps" "ORDER=1:am start;" "$(grep ORDER= "$TMP/dev.out")"
 check "a fix worktree reads and saves the main checkout's map" "MAP_FROM_WORKTREE=main" "$(cat "$TMP/dev.out")"
 check "a fix worktree gets no .jira-bug/ of its own" "WORKTREE_CLEAN=yes" "$(cat "$TMP/dev.out")"
+check "tap_text scrolls to a label below the fold" "TAP=ok text=Video AI at 540 1525 scrolled=1" "$(cat "$TMP/dev.out")"
+check "an optional nav step does not scroll" "OPT_SWIPES=0" "$(cat "$TMP/dev.out")"
+check "nav_to closes an ad covering the screen and retries the hop" "AD=closed" "$(sed -n '/AD=closed/,$p' "$TMP/dev.out")"
+check "after the ad, nav_to reaches the screen" "NAV=ok screen=rewards hops=2" "$(sed -n '/AD=closed/,$p' "$TMP/dev.out")"
 check "a hung adb call is cut off" "DEV_TIMEOUT=adb shell true" "$(cat "$TMP/dev.out")"
 check "a hung screencap ends with SHOT_ERROR, not a hang" "SHOT_ERROR=screencap timed out" "$(cat "$TMP/dev.out")"
 
